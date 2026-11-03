@@ -1,0 +1,7 @@
+ETHAN CERTIFICATE v1.0
+PWA / GitHub / Vercel source package
+Build date: 03 November 2026
+Issuer scope: Ethan Digital Academy only (Option A)
+Status: Dedicated Supabase project created; schema deployed; publishable client configuration added; owner account provisioned. Public sign-up setting, GitHub/Vercel deployment and production-domain tests remain pending.
+Validation performed: JavaScript syntax checks; JSON manifest/config checks; required asset/file presence; ZIP archive integrity; Supabase schema migration and table/RLS verification; owner-role record verified.
+Not performed: public sign-up setting change/verification, production deployment, live domain verification, real credential issuance, physical-device installation testing.
