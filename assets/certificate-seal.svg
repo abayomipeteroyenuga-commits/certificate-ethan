@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="Ethan Digital Academy seal">
+  <defs><linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f2d98f"/><stop offset=".5" stop-color="#c79732"/><stop offset="1" stop-color="#f1d58b"/></linearGradient></defs>
+  <path d="M80 4 91 17 108 11 113 28 131 29 130 47 146 57 137 73 148 88 133 100 137 118 119 123 113 141 96 135 80 151 64 135 47 141 41 123 23 118 27 100 12 88 23 73 14 57 30 47 29 29 47 28 52 11 69 17Z" fill="url(#gold)" stroke="#a77a25" stroke-width="2"/>
+  <circle cx="80" cy="78" r="55" fill="#102b55" stroke="#fff8e5" stroke-width="3"/>
+  <circle cx="80" cy="78" r="48" fill="none" stroke="#e6c46e" stroke-width="1.5"/>
+  <path d="M48 95 80 42 112 95" fill="none" stroke="#e6c46e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="80" y="88" fill="#fff" font-family="Arial,sans-serif" font-size="27" font-weight="800" text-anchor="middle">ED</text>
+  <path d="M50 104h60" stroke="#e6c46e" stroke-width="2"/>
+  <text x="80" y="117" fill="#fff" font-family="Arial,sans-serif" font-size="7" font-weight="700" letter-spacing="1.2" text-anchor="middle">ACADEMY</text>
+</svg>

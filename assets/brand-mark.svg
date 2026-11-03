@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="Ethan Certificate mark">
+  <rect width="120" height="120" rx="26" fill="#102b55"/>
+  <path d="M25 36h38v10H36v8h23v9H36v9h28v10H25z" fill="#fff"/>
+  <path d="M66 36h15c13 0 22 9 22 23s-9 23-22 23H66V72h14c7 0 11-5 11-13s-4-13-11-13H66z" fill="#2c83d5"/>
+  <path d="M76 53l13 8-13 8z" fill="#e2ad35"/>
+  <path d="M35 26l25-10 25 10-25 10z" fill="#e2ad35"/>
+  <path d="M83 26v14" stroke="#e2ad35" stroke-width="3"/><circle cx="83" cy="42" r="3" fill="#e2ad35"/>
+  <g fill="#7db8ed"><rect x="17" y="17" width="6" height="6"/><rect x="25" y="11" width="6" height="6"/><rect x="17" y="27" width="6" height="6"/></g>
+</svg>

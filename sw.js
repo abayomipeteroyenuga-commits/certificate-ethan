@@ -1,7 +1,7 @@
-const CACHE_NAME = 'ethan-certificate-v1-shell';
+const CACHE_NAME = 'ethan-certificate-v1.1.1-shell';
 const APP_SHELL = [
   '/', '/index.html', '/styles.css', '/app.js', '/config.js', '/manifest.webmanifest',
-  '/assets/icon-192.png', '/assets/icon-512.png', '/assets/ethan-certificate-logo.png'
+  '/assets/icon-192.png', '/assets/icon-512.png', '/assets/ethan-certificate-logo.png', '/assets/ethan-digital-academy-logo.png', '/assets/certificate-seal.svg'
 ];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL)).then(() => self.skipWaiting()));

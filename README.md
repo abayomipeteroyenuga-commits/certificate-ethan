@@ -1,90 +1,75 @@
-# ETHAN CERTIFICATE v1.0 — PWA / GitHub / Vercel build
+# ETHAN CERTIFICATE v1.1.1 — Global Credential Readiness Upgrade
 
 **Product:** ETHAN CERTIFICATE  
-**Purpose:** Official certificate issuance and public verification for Ethan Digital Academy.  
+**Issuer:** Ethan Digital Academy  
+**Parent company:** ALLON-MAADIAH INTERNATIONAL LIMITED (RC 1364788)  
 **Tagline:** Issue. Verify. Authenticate.  
-**Proposed application URL:** `https://certificate.ethandigitalacademy.org`  
-**Proposed public verification URL:** `https://verify.ethandigitalacademy.org`
+**Admin URL:** `https://certificate.ethandigitalacademy.org`  
+**Public verification URL:** `https://verify.ethandigitalacademy.org`
 
-## Included in this package
+## What this release adds
 
-- Responsive administrator dashboard.
-- Administrator sign-in through Supabase Auth (no public sign-up).
-- Certificate issuance with server-generated unique IDs in the format `EDA-CERT-YYYY-000001`.
-- Student profile creation/update as part of certificate issuance.
-- Ethan navy-blue and gold landscape certificate design.
-- QR code linked to the public verification page.
-- PDF export and browser print.
-- Certificate registry, search, status management and audit log.
-- Public verification by certificate number or QR token.
-- Revoked and suspended status handling, reactivation and linked replacement issuance.
-- PWA manifest, icons and service worker.
-- Supabase schema, RLS policies and secured RPC functions.
-- Vercel rewrite configuration.
+- Clear **Sign out** controls in the dashboard top bar and sidebar, including on mobile.
+- Local-device Supabase sign-out, explicit feedback, and session-ended handling.
+- Role-aware access for `owner`, `admin`, `issuer`, and `viewer`.
+- Owners and admins can suspend, revoke and reactivate; issuers can issue/reissue; viewers can view certificate registry only.
+- All certificate list reads use a role-checked registry RPC. Viewer responses omit student contacts, evidence links and internal notes; viewers also cannot query the certificate table, students or audit logs directly.
+- Rich credential metadata: achievement description, earning criteria, skills/competencies, optional evidence link, optional expiry date and framework alignment.
+- Public verification displays achievement information, skills and expiry status, while keeping email, phone, private notes and evidence URLs private.
+- Expired certificates are identified as expired by verification, even if their underlying registry status remains active.
+- CSV export of registry records for authorised staff (without student email or phone).
+- Settings page documents international standards and the honest implementation status.
+- PWA cache refreshed to v1.1.1.
 
-## Important: preview mode vs official operation
+## International systems reviewed
 
-The package opens in **Preview mode** until a Supabase project is connected. Preview records are stored only in the current browser and are visibly marked **DEMO ONLY — NOT VALID**. They are not official certificates and cannot be independently verified from another device.
+This release takes design direction from established credential ecosystems including Accredible and Credly, plus the open standards work of 1EdTech Open Badges 3.0, W3C Verifiable Credentials 2.0 and Europass Digital Credentials for Learning. Common practices include structured achievement metadata, criteria, skills, evidence, expiry, issuer identity, learner portability, controlled verification and credential analytics.
 
-To issue official certificates, complete the Supabase setup below, deploy the app over HTTPS, and test the public verification domain before issuing real learner records.
+**Important standards distinction:** v1.1.1 is metadata-ready and registry-verifiable. It does **not** yet issue cryptographically signed W3C Verifiable Credentials or Open Badges 3.0, does not have an electronic seal, does not provide a learner wallet, and is not 1EdTech certified. The next standards phase requires issuer key management, a cryptographic proof format, public-key/DID resolution, signed status/revocation data, portable learner delivery and conformance testing. Do not market this build as blockchain-backed, tamper-proof, W3C VC compliant or Open Badges certified.
 
-## 1. Supabase connection — completed
+## Database upgrade instructions
 
-A dedicated Supabase project has already been created and connected to this build:
+The existing v1.0.2 Supabase project already has the original five tables and RPCs. **Before deploying the v1.1.1 frontend, run this migration once** in the Supabase SQL Editor:
 
-- **Project:** `ethan-certificate`
-- **Project reference:** `ypmamxyorsnoyrwuqxxk`
-- **Region:** EU West (Ireland)
-- **Project URL:** `https://ypmamxyorsnoyrwuqxxk.supabase.co`
-- **Database:** schema deployed; five registry tables created with Row Level Security enabled.
-- **Frontend configuration:** `config.js` is populated with the project's public publishable key.
+`database/migrations/001_global_credential_readiness.sql`
 
-The first owner account has been created in **Authentication → Users** and promoted to the `owner` role in `public.admin_users`. The remaining Auth configuration action is to disable public sign-up in the Supabase Authentication settings. Only trusted administrators should be invited by the owner.
+It adds credential metadata columns, the v2 issuance RPC, a role-aware registry RPC with field redaction for viewers, role lookup, owner/admin-only status changes, expiry-aware public verification, and least-privilege grants for internal role helpers. The script is designed to be re-runnable. For a brand-new Supabase project, `database/schema.sql` includes the original schema and these security settings.
 
-**Never use a Supabase `service_role` or secret key in `config.js`.** The browser receives only the publishable key. RLS and the database RPC functions enforce permissions.
+If you already applied the earlier v1.1.0 version of migration 001, apply `database/migrations/002_restrict_internal_helpers.sql` once to revoke direct API execution from the internal `is_staff()` and `can_manage_certificates()` helpers.
 
-## 2. Deploy to GitHub and Vercel
+After migration, verify the owner row remains active in `public.admin_users`. The roles are:
 
-1. Create a new GitHub repository, for example `ethan-certificate`.
-2. Upload the contents of this package to the repository root (not the ZIP file itself).
-3. In Vercel, import the repository as a new project.
-4. This is a static web application; no build command is required. Set the output directory to `.` (project root).
-5. Deploy and test the Vercel preview URL.
-6. Add `certificate.ethandigitalacademy.org` to the Vercel project and configure its DNS records as Vercel instructs.
-7. Add `verify.ethandigitalacademy.org` as a second domain/alias to the same Vercel project and configure its DNS records.
-8. Wait for HTTPS certificates to become active.
+| Role | Permissions |
+|---|---|
+| `owner` | Full registry control and staff oversight |
+| `admin` | Issue, manage status, view records and export |
+| `issuer` | Issue/reissue and view records; cannot suspend/revoke/reactivate |
+| `viewer` | View certificate registry only; no student contact access, activity logs or write actions |
 
-`vercel.json` routes app paths to `index.html`, so the public verification experience works at the root of the verify subdomain.
+## Security and production notes
 
-## 3. First production test
+- Disable public self-sign-up in Supabase Authentication before launch.
+- Enable leaked-password protection in Supabase Auth. The existing project advisor check on 3 November 2026 reported this setting is currently disabled.
+- Re-run Supabase Security and Performance Advisors after applying the migration. Existing SECURITY DEFINER warnings include the intentionally public verification RPC and authenticated administrative functions; verify the exact grants and server-side role checks.
+- Add rate limiting and abuse monitoring to public verification before broad public launch.
+- Keep the Supabase service-role/secret key out of all browser files and GitHub. `config.js` must contain only the publishable/anon key.
+- Use MFA for owner accounts where available.
+- Review staff membership in `public.admin_users` regularly.
+- The `evidence_url` is restricted to owner, admin and issuer table access, and is deliberately excluded from the viewer-safe registry RPC and public verification.
+- Public verification exposes certificate-safe achievement metadata only.
+- Current public verification uses the database registry and QR lookup; cryptographic proof verification and rate-limiting still need a dedicated backend/security phase.
 
-Before using the platform for real certificates:
+## Deployment
 
-- Sign in with the provisioned owner account.
-- Issue one test certificate to a clearly identified test recipient.
-- Confirm its number is unique and follows `EDA-CERT-YYYY-000001`.
-- Download and inspect the PDF on desktop and mobile.
-- Scan the QR code using a different device/browser.
-- Confirm the public page returns **VALID CERTIFICATE** for the active record.
-- Revoke the test certificate with a reason and confirm the public page returns **REVOKED CERTIFICATE**.
-- Confirm a non-admin user cannot access the admin registry or issue certificates.
-- Delete or clearly retain the test record according to the academy's recordkeeping policy; do not use test records as real awards.
+1. For an existing v1.0.2 database, run migration 001. If you previously applied the original v1.1.0 migration 001, run migration 002 as well.
+2. Replace the GitHub repository contents with this package's extracted contents (do not upload the ZIP file itself).
+3. Import/deploy the repository in Vercel as a static site with no build command and output directory `.`.
+4. Attach `certificate.ethandigitalacademy.org` and `verify.ethandigitalacademy.org` to the same Vercel project.
+5. Test owner, admin, issuer and viewer access separately.
+6. Test sign-out, expiry, PDF generation, QR verification, suspension, revocation and replacement issuance on a separate device.
+7. Confirm public self-sign-up is disabled and no secrets are exposed.
 
-## 4. PWA installation
-
-After deployment over HTTPS, open the app in Chrome or Edge and use **Install app** from the browser interface. On supported mobile browsers, use **Add to Home Screen**. The service worker caches the app shell; official issuing and verification still require an internet connection to reach Supabase.
-
-## 5. v1.0 scope and limitations
-
-- Single issuer: Ethan Digital Academy only. The database is structured so multi-institution support can be added in a later version, but external issuers are not enabled in v1.0.
-- The certificate PDF is generated in the browser from the official database record. The registry record is the source of truth.
-- Public verification exposes only certificate-safe fields. Student email, phone, private remarks and internal audit data are not returned.
-- Certificate number sequence is global and the year is included in the displayed number; the counter does not reset each January.
-- Replacement certificates receive a new ID and are linked to the previous suspended/revoked record; the previous record remains in the audit trail.
-- PDF export and QR generation load small browser libraries from public CDNs and therefore require internet access. Print-to-PDF is also available.
-- The build is connected to the dedicated Supabase project, the database schema has been deployed, and the first owner account has been provisioned. Disabling public sign-up, GitHub/Vercel deployment, custom-domain DNS, and end-to-end production testing are still pending.
-
-## Folder structure
+## Project structure
 
 ```text
 ethan-certificate/
@@ -95,14 +80,13 @@ ethan-certificate/
 ├── manifest.webmanifest
 ├── sw.js
 ├── vercel.json
-├── robots.txt
 ├── assets/
-│   ├── brand-mark.svg
-│   ├── ethan-certificate-logo.png
-│   ├── icon-192.png
-│   └── icon-512.png
 ├── database/
-│   └── schema.sql
+│   ├── schema.sql
+│   └── migrations/
+│       └── 001_global_credential_readiness.sql
 └── docs/
-    └── ADMIN-SETUP.md
+    ├── ADMIN-SETUP.md
+    ├── DEPLOYMENT-CHECKLIST.md
+    └── GLOBAL-CREDENTIAL-ROADMAP.md
 ```
