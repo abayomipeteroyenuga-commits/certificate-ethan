@@ -5,6 +5,9 @@
   "engines": {
     "node": ">=22"
   },
+  "scripts": {
+    "start": "node server.js"
+  },
   "dependencies": {
     "bcryptjs": "3.0.2",
     "pg": "8.16.3"
