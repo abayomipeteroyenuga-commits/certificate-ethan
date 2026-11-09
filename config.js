@@ -1,11 +1,10 @@
 /*
  * Ethan Certificate public configuration.
- * Supabase anon/publishable keys are designed to be used in browsers.
- * NEVER put a Supabase service_role key in this file.
+ * Database access and administrator authentication run through same-origin
+ * Vercel API routes. Neon credentials are server-side environment variables.
  */
 window.ETHAN_CERT_CONFIG = {
-  supabaseUrl: "https://ypmamxyorsnoyrwuqxxk.supabase.co",
-  supabaseAnonKey: "sb_publishable_NyGSl8gkDBIsh0aKt6RJZw_OoCPHGly",
+  apiBaseUrl: "",
   appUrl: "https://certificate.ethandigitalacademy.org",
   verifyUrl: "https://verify.ethandigitalacademy.org",
   issuerName: "Ethan Digital Academy",
