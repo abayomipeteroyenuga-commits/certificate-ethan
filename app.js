@@ -2,9 +2,9 @@ const CFG = window.ETHAN_CERT_CONFIG || {};
 const app = document.getElementById('app-shell');
 const toastBox = document.getElementById('toast-container');
 const DEMO_KEY = 'ethan_certificate_demo_v1';
-const HAS_SUPABASE = Boolean((CFG.supabaseUrl || '').trim() && (CFG.supabaseAnonKey || '').trim());
+const HAS_BACKEND = true;
 const state = {
-  mode: 'preview', sb: null, user: null, tab: 'overview', certificates: [], students: [], audit: [],
+  mode: 'preview', api: null, user: null, tab: 'overview', certificates: [], students: [], audit: [],
   lastIssued: null, reissueFrom: null, loading: false, publicMode: false, installPrompt: null,
   adminRole: null, signingOut: false, demoData: null
 };
@@ -83,40 +83,71 @@ async function init() {
   const publicIdentifier = params.get('verify') || params.get('number') || '';
   if (isVerifyHost || publicIdentifier) {
     state.publicMode = true;
-    await initSupabaseIfConfigured();
+    await initNeonApiIfConfigured();
     renderPublicVerify(publicIdentifier);
     if (publicIdentifier) runPublicVerification(publicIdentifier);
     return;
   }
-  if (HAS_SUPABASE) {
+  if (HAS_BACKEND) {
     try {
-      await initSupabaseIfConfigured();
-      const {data:{session}} = await state.sb.auth.getSession();
+      await initNeonApiIfConfigured();
+      const {data:{session}} = await state.api.auth.getSession();
       if (session) {
         state.user = session.user; state.mode = 'live';
-        const {data:role,error:roleError}=await state.sb.rpc('get_admin_role');
-        if(roleError || !role){await state.sb.auth.signOut({scope:'local'});state.mode='preview';state.user=null;renderLogin('This account is not authorised to access the Ethan certificate registry. Ask the owner to provision administrator access.');return;}
+        const {data:role,error:roleError}=await state.api.rpc('get_admin_role');
+        if(roleError || !role){await state.api.auth.signOut({scope:'local'});state.mode='preview';state.user=null;renderLogin('This account is not authorised to access the Ethan certificate registry. Ask the owner to provision administrator access.');return;}
         state.adminRole = role;
         await loadAdminData(); renderApp();
       } else renderLogin();
     } catch (error) {
-      renderLogin(error.message || 'Unable to connect to Supabase.');
+      renderLogin(error.message || 'Unable to connect to the Neon certificate service.');
     }
   } else renderLogin();
 }
-async function initSupabaseIfConfigured() {
-  if (!HAS_SUPABASE || state.sb) return;
-  const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2.49.8');
-  state.sb = createClient(CFG.supabaseUrl, CFG.supabaseAnonKey, {
-    auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}
+async function certificateApiCall(action, payload={}) {
+  const endpoint = (CFG.apiBaseUrl || '') + '/api/certificate';
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: JSON.stringify({ action, ...payload })
   });
-  state.sb.auth.onAuthStateChange((event) => {
-    if (event === 'SIGNED_OUT' && state.mode === 'live' && !state.signingOut) {
-      state.user = null; state.adminRole = null; state.mode = 'preview';
-      state.certificates = []; state.students = []; state.audit = [];
-      renderLogin('Your administrator session has ended. Please sign in again.');
+  let body = {};
+  try { body = await response.json(); } catch {}
+  if (!response.ok) throw new Error(body.error || 'The certificate service could not complete the request.');
+  return body.data;
+}
+function certificateApiResult(promise) {
+  return promise.then(data => ({ data, error: null })).catch(error => ({ data: null, error }));
+}
+function createCertificateApiClient() {
+  return {
+    auth: {
+      getSession: () => certificateApiResult(certificateApiCall('session').then(data => ({ session: data?.session || null }))),
+      signInWithPassword: ({ email, password }) => certificateApiResult(certificateApiCall('login', { email, password }).then(data => ({ user: data?.user || null }))),
+      signOut: () => certificateApiResult(certificateApiCall('logout')),
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } })
+    },
+    rpc: (name, args={}) => certificateApiResult(certificateApiCall('rpc', { name, args })),
+    from: (table) => {
+      const query = {
+        orderBy: 'created_at',
+        ascending: false,
+        rowLimit: 100,
+        select() { return this; },
+        order(column, options={}) { this.orderBy = column; this.ascending = options.ascending === true; return this; },
+        limit(value) { this.rowLimit = Number(value) || 100; return this; },
+        then(resolve, reject) {
+          return certificateApiResult(certificateApiCall('select', { table, orderBy: this.orderBy, ascending: this.ascending, limit: this.rowLimit })).then(resolve, reject);
+        }
+      };
+      return query;
     }
-  });
+  };
+}
+async function initNeonApiIfConfigured() {
+  if (state.api) return;
+  state.api = createCertificateApiClient();
 }
 
 function renderLogin(errorMessage='') {
@@ -142,35 +173,79 @@ function renderLogin(errorMessage='') {
           <h2>Welcome back</h2>
           <p>Sign in to manage Ethan Digital Academy certificates. Public verification does not require an account.</p>
           ${errorMessage ? `<div class="helper-note" style="margin-bottom:14px;color:#9f2938">${esc(errorMessage)}</div>` : ''}
-          ${HAS_SUPABASE ? `
+          ${HAS_BACKEND ? `
             <form id="login-form">
               <div class="field"><label for="login-email">Administrator email <span class="req">*</span></label><input id="login-email" name="email" type="email" autocomplete="username" required placeholder="admin@example.com"></div>
               <div class="field"><label for="login-password">Password <span class="req">*</span></label><input id="login-password" name="password" type="password" autocomplete="current-password" required placeholder="Enter your password"></div>
               <button class="btn btn-primary" type="submit" id="login-submit">Sign in securely <span>→</span></button>
+            </form>
+            <button class="btn btn-outline" type="button" id="first-access-toggle" style="margin-top:10px;width:100%">First-time migrated owner setup</button>
+            <form id="first-access-form" hidden style="margin-top:14px">
+              <div class="helper-note" style="margin-bottom:12px">Use the one-time migration key to set a new password for the migrated owner account. This setup can be completed only once.</div>
+              <div class="field"><label for="setup-email">Administrator email</label><input id="setup-email" name="email" type="email" autocomplete="username" required></div>
+              <div class="field"><label for="setup-token">One-time migration key</label><input id="setup-token" name="token" type="password" autocomplete="off" required></div>
+              <div class="field"><label for="setup-password">New password</label><input id="setup-password" name="password" type="password" minlength="12" autocomplete="new-password" required></div>
+              <div class="field"><label for="setup-confirm">Confirm new password</label><input id="setup-confirm" name="confirm" type="password" minlength="12" autocomplete="new-password" required></div>
+              <button class="btn btn-primary" type="submit" id="first-access-submit">Activate Neon owner account <span>→</span></button>
             </form>` : `
-            <div class="helper-note"><strong>Setup required:</strong> Connect your Supabase project in <code>config.js</code> to enable real administrator accounts, permanent certificate records and public verification.</div>
+            <div class="helper-note"><strong>Setup required:</strong> Neon database access is managed securely by the server. The browser does not connect directly to the database.</div>
             <button class="btn btn-primary" id="demo-login">Open preview dashboard <span>→</span></button>`}
           <div class="login-divider">OR</div>
           <button class="btn btn-outline" id="open-verification">Open public verification page</button>
-          <div class="login-footnote">Administrator accounts are provisioned by the Ethan owner. Confirm public sign-up is disabled in Supabase before production. Never share a Supabase service-role key in the browser.</div>
+          <div class="login-footnote">Administrator accounts are provisioned by the Ethan owner. Confirm public sign-up is disabled in Neon before production. Never share a Neon service-role key in the browser.</div>
         </div>
       </section>
     </main>`;
   $('#login-form')?.addEventListener('submit', handleLogin);
+  $('#first-access-form')?.addEventListener('submit', handleFirstAccess);
+  $('#first-access-toggle')?.addEventListener('click', () => {
+    const setup = $('#first-access-form');
+    const login = $('#login-form');
+    const opening = setup.hidden;
+    setup.hidden = !opening;
+    if (login) login.hidden = opening;
+    $('#first-access-toggle').textContent = opening ? 'Return to sign in' : 'First-time migrated owner setup';
+  });
   $('#demo-login')?.addEventListener('click', startDemo);
   $('#open-verification')?.addEventListener('click', ()=>{ location.href = `${location.origin}/?verify=`; });
 }
+async function handleFirstAccess(event) {
+  event.preventDefault();
+  const form = new FormData(event.currentTarget);
+  const email = String(form.get('email') || '').trim();
+  const token = String(form.get('token') || '');
+  const password = String(form.get('password') || '');
+  const confirm = String(form.get('confirm') || '');
+  if (password !== confirm) { toast('The new passwords do not match.','error'); return; }
+  if (password.length < 12) { toast('Choose a password with at least 12 characters.','error'); return; }
+  const button = $('#first-access-submit');
+  button.disabled = true; button.textContent = 'Activating account…';
+  try {
+    await initNeonApiIfConfigured();
+    const data = await certificateApiCall('bootstrap', { email, token, password });
+    state.user = data.user; state.mode = 'live';
+    const {data:role,error:roleError} = await state.api.rpc('get_admin_role');
+    if (roleError || !role) throw new Error('The migrated owner role could not be confirmed. Contact the Ethan administrator.');
+    state.adminRole = role;
+    await loadAdminData(); renderApp();
+    toast('Your Neon owner account is active.','success');
+  } catch(error) {
+    toast(error.message || 'Unable to activate the owner account.','error');
+    button.disabled = false; button.innerHTML = 'Activate Neon owner account <span>→</span>';
+  }
+}
+
 async function handleLogin(event) {
   event.preventDefault();
   const form = new FormData(event.currentTarget);
   const button = $('#login-submit'); button.disabled=true; button.textContent='Signing in…';
   try {
-    await initSupabaseIfConfigured();
-    const {data,error} = await state.sb.auth.signInWithPassword({email:form.get('email'),password:form.get('password')});
+    await initNeonApiIfConfigured();
+    const {data,error} = await state.api.auth.signInWithPassword({email:form.get('email'),password:form.get('password')});
     if (error) throw error;
     state.user=data.user; state.mode='live';
-    const {data:role,error:roleError}=await state.sb.rpc('get_admin_role');
-    if(roleError || !role){await state.sb.auth.signOut({scope:'local'});state.mode='preview';state.user=null;throw new Error('This account is not authorised to access the Ethan certificate registry. Ask the owner to provision administrator access.');}
+    const {data:role,error:roleError}=await state.api.rpc('get_admin_role');
+    if(roleError || !role){await state.api.auth.signOut({scope:'local'});state.mode='preview';state.user=null;throw new Error('This account is not authorised to access the Ethan certificate registry. Ask the owner to provision administrator access.');}
     state.adminRole=role;
     await loadAdminData(); renderApp();
     toast('Signed in successfully.','success');
@@ -186,8 +261,8 @@ async function signOut() {
   const buttons = [$('#signout-topbar'), $('#signout-sidebar')].filter(Boolean);
   buttons.forEach(button => { button.disabled = true; button.dataset.originalText = button.textContent; button.textContent = 'Signing out…'; });
   try {
-    if (state.mode === 'live' && state.sb) {
-      const { error } = await state.sb.auth.signOut({ scope: 'local' });
+    if (state.mode === 'live' && state.api) {
+      const { error } = await state.api.auth.signOut({ scope: 'local' });
       if (error) throw error;
     }
     state.mode='preview'; state.user=null; state.adminRole=null;
@@ -205,13 +280,13 @@ async function signOut() {
 async function loadAdminData() {
   if (state.mode==='demo') { loadDemoData(); return; }
   const isViewer = state.adminRole === 'viewer';
-  const certQuery = state.sb.rpc('get_certificate_registry');
+  const certQuery = state.api.rpc('get_certificate_registry');
   const studentsQuery = isViewer
     ? Promise.resolve({ data: [], error: null })
-    : state.sb.from('students').select('*').order('created_at',{ascending:false}).limit(500);
+    : state.api.from('students').select('*').order('created_at',{ascending:false}).limit(500);
   const logsQuery = isViewer
     ? Promise.resolve({ data: [], error: null })
-    : state.sb.from('audit_logs').select('*').order('created_at',{ascending:false}).limit(100);
+    : state.api.from('audit_logs').select('*').order('created_at',{ascending:false}).limit(100);
   const [certs,students,logs] = await Promise.all([certQuery,studentsQuery,logsQuery]);
   if (certs.error) throw certs.error;
   if (students.error) throw students.error;
@@ -272,7 +347,7 @@ function renderPage() {
   bindPageEvents();
 }
 function pageHead(eyebrow,title,subtitle,action='') { return `<div class="content-head"><div><div class="eyebrow">${eyebrow}</div><h1 class="page-title">${title}</h1><p class="page-subtitle">${subtitle}</p></div>${action}</div>`; }
-function demoNotice() { return state.mode==='demo' ? `<div class="demo-banner"><strong>PREVIEW MODE — NOT AN OFFICIAL REGISTRY.</strong> Records created here stay in this browser only. Connect Supabase and deploy the database schema before issuing real certificates or enabling public verification.</div>` : ''; }
+function demoNotice() { return state.mode==='demo' ? `<div class="demo-banner"><strong>PREVIEW MODE — NOT AN OFFICIAL REGISTRY.</strong> Records created here stay in this browser only. Connect the Neon server API before issuing real certificates or enabling public verification.</div>` : ''; }
 function renderOverview() {
   const total=state.certificates.length, active=state.certificates.filter(c=>effectiveStatus(c)==='active').length, revoked=state.certificates.filter(c=>effectiveStatus(c)==='revoked').length, studentCount=state.adminRole==='viewer'?'—':state.students.length;
   const recent=state.certificates.slice(0,6);
@@ -366,8 +441,8 @@ function renderSettings() {
         <div class="field" style="margin-bottom:13px"><label>Registration number</label><input value="RC ${esc(CFG.issuerRc||'1364788')}" readonly></div>
         <div class="field"><label>Certificate numbering format</label><input value="EDA-CERT-YYYY-000001 (automatic)" readonly></div>
       </section>
-      <section class="panel panel-pad"><div class="section-head"><div><h3>Connection status</h3><p>Production services required for official issuance.</p></div>${HAS_SUPABASE?'<span class="pill pill-green">Configured</span>':'<span class="pill pill-amber">Not connected</span>'}</div>
-        <div class="quick-list"><div class="quick-action"><span class="quick-icon">▣</span><span><b>Supabase database</b><small>${HAS_SUPABASE?'Connection details are present in config.js.':'Add project URL and anon key in config.js.'}</small></span></div><div class="quick-action"><span class="quick-icon">♙</span><span><b>Administrator access</b><small>Provision the owner account in Supabase Auth, then add its user ID to admin_users.</small></span></div><div class="quick-action"><span class="quick-icon">⌕</span><span><b>Public verification</b><small>Use verify.ethandigitalacademy.org as a domain alias to this deployment.</small></span></div></div>
+      <section class="panel panel-pad"><div class="section-head"><div><h3>Connection status</h3><p>Production services required for official issuance.</p></div>${HAS_BACKEND?'<span class="pill pill-green">Configured</span>':'<span class="pill pill-amber">Not connected</span>'}</div>
+        <div class="quick-list"><div class="quick-action"><span class="quick-icon">▣</span><span><b>Neon database</b><small>${HAS_BACKEND?'The server-side Neon connection is configured.':'Configure DATABASE_URL in the Vercel project environment.'}</small></span></div><div class="quick-action"><span class="quick-icon">♙</span><span><b>Administrator access</b><small>Owner and staff roles are stored in the Neon admin_users table and enforced by the server API.</small></span></div><div class="quick-action"><span class="quick-icon">⌕</span><span><b>Public verification</b><small>Use verify.ethandigitalacademy.org as a domain alias to this deployment.</small></span></div></div>
       </section>
     </div>
     <section class="panel panel-pad" style="margin-top:16px"><div class="section-head"><div><h3>Global credential standards roadmap</h3><p>Designed around international credential data and verification practices.</p></div><span class="pill pill-amber">Readiness stage · not certified</span></div>
@@ -379,7 +454,7 @@ function renderSettings() {
       <div class="helper-note" style="margin-top:12px"><strong>Honest status:</strong> Ethan Certificate currently provides database-backed online verification and QR lookup. It must not be marketed as W3C VC 2.0, Open Badges 3.0 certified, blockchain-backed or cryptographically signed until those features are implemented and independently tested.</div>
     </section>
     <section class="panel panel-pad" style="margin-top:16px"><div class="section-head"><div><h3>Administrator permissions</h3><p>Your current role: <strong>${esc((state.adminRole||'preview').toUpperCase())}</strong></p></div></div><div class="role-grid"><div><b>Owner / Administrator</b><span>Issue, view, suspend, revoke, reactivate and oversee records.</span></div><div><b>Certificate issuer</b><span>Issue and reissue certificates; view records. Cannot change status.</span></div><div><b>Read-only viewer</b><span>View certificate registry only. Cannot view student contact records or activity logs, or make changes.</span></div></div></section>
-    <section class="panel panel-pad" style="margin-top:16px"><div class="section-head"><div><h3>Production security checklist</h3><p>Complete these steps before issuing official certificates.</p></div></div><div class="quick-list"><div class="helper-note"><strong>1.</strong> For a fresh database, run <code>database/schema.sql</code>. For an existing v1.0.2 database, run <code>database/migrations/001_global_credential_readiness.sql</code>.</div><div class="helper-note"><strong>2.</strong> Create the owner account in Supabase Authentication, then run the owner-promotion SQL in <code>docs/ADMIN-SETUP.md</code>.</div><div class="helper-note"><strong>3.</strong> Add the Supabase project URL and anon/publishable key to <code>config.js</code>. Never use the service_role key in frontend code.</div><div class="helper-note"><strong>4.</strong> Deploy this folder to Vercel and attach both certificate and verify domains.</div><div class="helper-note"><strong>5.</strong> Test issuing, PDF download, QR verification, revoked status and access controls before using real learner records.</div></div></section>`;
+    <section class="panel panel-pad" style="margin-top:16px"><div class="section-head"><div><h3>Production security checklist</h3><p>Complete these steps before issuing official certificates.</p></div></div><div class="quick-list"><div class="helper-note"><strong>1.</strong> For a fresh database, run <code>database/schema.sql</code>. For an existing v1.0.2 database, run <code>database/migrations/001_global_credential_readiness.sql</code>.</div><div class="helper-note"><strong>2.</strong> Create the owner account in Neon Authentication, then run the owner-promotion SQL in <code>docs/ADMIN-SETUP.md</code>.</div><div class="helper-note"><strong>3.</strong> Add the Neon project URL and anon/publishable key to <code>config.js</code>. Never use the service_role key in frontend code.</div><div class="helper-note"><strong>4.</strong> Deploy this folder to Vercel and attach both certificate and verify domains.</div><div class="helper-note"><strong>5.</strong> Test issuing, PDF download, QR verification, revoked status and access controls before using real learner records.</div></div></section>`;
 }
 
 function bindPageEvents() {
@@ -444,7 +519,7 @@ async function handleIssueSubmit(event) {
       cert={id:`demo-${Date.now()}`,certificate_number:number,verification_token:crypto.randomUUID?crypto.randomUUID():`demo-${Date.now()}`,students:student,student_id:student.id,reissued_from:payload.p_reissued_from,award_title:payload.p_award_title,programme_name:payload.p_programme_name,course_title:payload.p_course_title,duration:payload.p_duration,date_completed:payload.p_date_completed,issued_at:payload.p_date_issued,status:'demo',grade:payload.p_grade,remarks:payload.p_remarks,signatory_name:payload.p_signatory_name,signatory_title:payload.p_signatory_title,achievement_description:payload.p_achievement_description,criteria_narrative:payload.p_criteria_narrative,skills_tags:payload.p_skills_tags,evidence_url:payload.p_evidence_url,expiration_date:payload.p_expiration_date,framework_alignment:payload.p_framework_alignment};
       data.certificates.unshift(cert);data.audit.unshift({id:`log-${Date.now()}`,action:payload.p_reissued_from?'DEMO CERTIFICATE REISSUED':'DEMO CERTIFICATE ISSUED',details:{certificate_number:number,reissued_from:payload.p_reissued_from},created_at:new Date().toISOString()});saveDemoStore(data);loadDemoData();
     } else {
-      const {data,error}=await state.sb.rpc('issue_certificate_v2',payload);if(error)throw error;cert=Array.isArray(data)?data[0]:data;
+      const {data,error}=await state.api.rpc('issue_certificate_v2',payload);if(error)throw error;cert=Array.isArray(data)?data[0]:data;
       await loadAdminData();cert=state.certificates.find(c=>c.id===cert.id)||cert;
     }
     state.lastIssued=cert;state.reissueFrom=null;toast(`Certificate issued: ${cert.certificate_number}`,'success');
@@ -471,7 +546,7 @@ async function changeCertificateStatus(id, nextStatus) {
       const data=seedDemoStore();const item=data.certificates.find(c=>c.id===id);if(item){item.status=nextStatus;item.status_reason=reason?.trim()||null;item.revoked_at=nextStatus==='revoked'?new Date().toISOString():null;}
       data.audit.unshift({id:`log-${Date.now()}`,action:`DEMO CERTIFICATE ${nextStatus.toUpperCase()}`,details:{certificate_number:cert.certificate_number,reason:reason?.trim()||null},created_at:new Date().toISOString()});saveDemoStore(data);loadDemoData();
     } else {
-      const {error}=await state.sb.rpc('set_certificate_status',{p_certificate_id:id,p_status:nextStatus,p_reason:reason?.trim()||null});if(error)throw error;await loadAdminData();
+      const {error}=await state.api.rpc('set_certificate_status',{p_certificate_id:id,p_status:nextStatus,p_reason:reason?.trim()||null});if(error)throw error;await loadAdminData();
     }
     renderPage();toast(`Certificate status changed to ${label}.`,'success');
   } catch(error){toast(error.message||'Could not update certificate status.','error');}
@@ -479,14 +554,14 @@ async function changeCertificateStatus(id, nextStatus) {
 
 async function verifyIdentifier(identifier) {
   if(!identifier) return {status:'not_found'};
-  if(state.mode==='demo' || !HAS_SUPABASE) {
+  if(state.mode==='demo' || !HAS_BACKEND) {
     const data=seedDemoStore();const cert=data.certificates.find(c=>String(c.certificate_number).toLowerCase()===identifier.toLowerCase()||String(c.verification_token).toLowerCase()===identifier.toLowerCase());
     data.verifications=(data.verifications||0)+1;saveDemoStore(data);
     if(!cert)return {status:'not_found'};
     const demoStatus=cert.status==='active'&&cert.expiration_date&&cert.expiration_date<todayISO()?'expired':cert.status==='demo'?'demo':cert.status;
     return {status:demoStatus,certificate_number:cert.certificate_number,recipient_name:recipientName(cert),award_title:cert.award_title,programme_name:cert.programme_name,course_title:cert.course_title,date_completed:cert.date_completed,date_issued:cert.issued_at,issuer_name:CFG.issuerName||'Ethan Digital Academy',duration:cert.duration,achievement_description:cert.achievement_description,criteria_narrative:cert.criteria_narrative,skills_tags:cert.skills_tags||[],expiration_date:cert.expiration_date,framework_alignment:cert.framework_alignment};
   }
-  try {const {data,error}=await state.sb.rpc('verify_certificate',{p_identifier:identifier});if(error)throw error;return data||{status:'not_found'};}
+  try {const {data,error}=await state.api.rpc('verify_certificate',{p_identifier:identifier});if(error)throw error;return data||{status:'not_found'};}
   catch(error){return {status:'error',message:error.message||'Verification service unavailable.'};}
 }
 function verificationCard(result) {
@@ -517,7 +592,7 @@ function verificationCard(result) {
 function renderPublicVerify(initial='') {
   app.innerHTML=`<main class="verify-shell"><header class="verify-top"><div class="verify-brand"><img src="/assets/ethan-digital-academy-logo.png" alt="Ethan Digital Academy logo"><div><b>ETHAN CERTIFICATE</b><small>OFFICIAL PUBLIC VERIFICATION</small></div></div><a class="btn btn-outline btn-small" href="${esc(CFG.appUrl||'https://certificate.ethandigitalacademy.org')}">Administrator login</a></header>
     <section class="verify-hero"><div class="eyebrow">ETHAN DIGITAL ACADEMY · CERTIFICATE REGISTRY</div><h1>Verify a certificate.</h1><p>Confirm whether a certificate was issued by Ethan Digital Academy and check its current registry status. Scan the certificate QR code or enter its unique certificate number below.</p></section>
-    <section class="panel verify-card"><div class="section-head"><div><h3>Certificate verification</h3><p>Enter the certificate number exactly as printed on the certificate.</p></div><span class="pill pill-blue">Public service</span></div><form id="public-verify-form" class="verify-search"><input id="public-verify-input" value="${esc(initial)}" placeholder="EDA-CERT-2026-000001" autocomplete="off" required><button class="btn btn-primary" type="submit">Verify now →</button></form><div id="public-verify-result" class="verify-result">${HAS_SUPABASE?'':'<div class="helper-note" style="margin-top:18px"><strong>Preview environment:</strong> the live public registry becomes available after the Supabase database is connected and the application is deployed. Local demo records are not official verification records.</div>'}</div></section>
+    <section class="panel verify-card"><div class="section-head"><div><h3>Certificate verification</h3><p>Enter the certificate number exactly as printed on the certificate.</p></div><span class="pill pill-blue">Public service</span></div><form id="public-verify-form" class="verify-search"><input id="public-verify-input" value="${esc(initial)}" placeholder="EDA-CERT-2026-000001" autocomplete="off" required><button class="btn btn-primary" type="submit">Verify now →</button></form><div id="public-verify-result" class="verify-result">${HAS_BACKEND?'':'<div class="helper-note" style="margin-top:18px"><strong>Preview environment:</strong> the live public registry becomes available after the Neon database is connected and the application is deployed. Local demo records are not official verification records.</div>'}</div></section>
     <footer class="verify-footer">Issued by <strong>${esc(CFG.issuerName||'Ethan Digital Academy')}</strong>, a brand of ${esc(CFG.issuerParent||'ALLON-MAADIAH INTERNATIONAL LIMITED')} (RC ${esc(CFG.issuerRc||'1364788')}). A positive result confirms a matching registry record; it does not replace independent checks required by an employer or institution.</footer></main>`;
   $('#public-verify-form').addEventListener('submit',async event=>{event.preventDefault();const value=$('#public-verify-input').value.trim();$('#public-verify-result').innerHTML='<div class="loading-inline"><span class="spinner"></span> Checking the official registry…</div>';const result=await runPublicVerification(value);$('#public-verify-result').innerHTML=verificationCard(result);});
 }
