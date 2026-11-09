@@ -1,11 +1,12 @@
-ETHAN CERTIFICATE v1.1.1
-PWA / GitHub / Vercel source package
-Build date: 03 November 2026
-Issuer scope: Ethan Digital Academy only (single issuer)
-Release: Global Credential Readiness Upgrade
-Included: visible topbar/sidebar sign-out; local-device Supabase sign-out; signed-out session handling; role-aware owner/admin/issuer/viewer permissions; read-only viewer isolation through a protected safe-registry RPC (no student contacts, audit logs or evidence URLs); credential achievement/criteria/skills/evidence/expiry/framework metadata; expiry-aware public verification and expired-record reissue; CSV registry export; international standards readiness guidance.
-Database: v1.1.0 credential-readiness migration and v1.1.1 internal-helper permission hardening have been applied to the connected Supabase project and verified. For existing v1.0.2 projects, use database/migrations/001_global_credential_readiness.sql; if the original v1.1.0 migration was already applied, use 002_restrict_internal_helpers.sql. Fresh installs can run database/schema.sql.
-Standards status: metadata-ready and registry-verifiable; not yet issuing cryptographically signed W3C VC 2.0 or Open Badges 3.0 credentials; not 1EdTech certified; no blockchain or electronic seal claim.
-Validation performed: JavaScript syntax, JSON/manifest/config checks, SQL function signature and migration consistency checks, package integrity, demo UI smoke tests and role-specific DOM checks.
-Not performed: production browser login/issuance, Vercel deployment, custom domain DNS, physical device QR/PWA verification, formal standards conformance or third-party security audit.
-Connected Supabase verification (2026-11-03): migration applied; six metadata columns, registry RPC, issuance RPC and role lookup verified; owner access returned one registry record in a simulated authenticated session. Internal helper RPC execution was revoked from authenticated clients. Security advisor still reports role-checked SECURITY DEFINER API RPCs and intentional anonymous public verification; leaked-password protection is disabled and public self-sign-up status remains unconfirmed. Performance advisor reports unused indexes as informational.
+ETHAN CERTIFICATE v1.2.0
+Backend cutover: Supabase -> Neon PostgreSQL
+Frontend: static PWA served by Vercel
+API: Vercel Node function at /api/certificate
+Database: Neon project ETHAN CERTIFICATE / database ethan_certificate
+Tables: app_users, admin_users, students, certificates, audit_logs, verification_logs, app_sessions, request_limits
+Authentication: bcrypt password hashes, server-side role enforcement, secure HttpOnly sessions
+Roles: owner, admin, issuer, viewer
+Migration: 1 user identity, 1 admin role, 1 student, 1 certificate, 1 audit record, 1 verification log copied with original UUIDs and certificate verification token
+Password migration: Supabase password hashes were not exported; the owner must complete one-time Neon password setup
+Rollback: previous Supabase project remains intact temporarily; application source no longer uses Supabase
+No public administrator self-sign-up
