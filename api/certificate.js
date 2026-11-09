@@ -476,3 +476,16 @@ module.exports = async function handler(req, res) {
     return send(res, status, { error: status >= 500 ? 'The certificate service is temporarily unavailable.' : error.message });
   }
 };
+
+module.exports.healthCheck = async function healthCheck() {
+  await getPool().query('SELECT 1');
+  return true;
+};
+
+module.exports.close = async function close() {
+  if (pool) {
+    const activePool = pool;
+    pool = null;
+    await activePool.end();
+  }
+};
