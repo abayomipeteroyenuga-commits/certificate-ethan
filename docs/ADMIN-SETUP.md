@@ -1,65 +1,42 @@
-# Ethan Certificate — first administrator setup
+# Ethan Certificate — Neon owner and staff administration
 
-This application does not provide public administrator sign-up. The first owner is provisioned directly in Supabase by the project owner.
+## First owner activation after the Supabase-to-Neon migration
 
-## 1. Create the owner account
+The owner identity and role were migrated into Neon, but the previous Supabase password hash was deliberately not exported. Activate the migrated owner once:
 
-1. Open the Supabase project for Ethan Certificate.
-2. Go to **Authentication → Users**.
-3. Invite or create the owner's account using the intended administrator email.
-4. Confirm the account is active and set a secure password.
+1. Open https://certificate.ethandigitalacademy.org.
+2. Select **First-time migrated owner setup**.
+3. Enter the existing administrator email.
+4. Enter the one-time migration key supplied by the project owner.
+5. Set a new password of at least 12 characters and confirm it.
 
-## 2. Promote the owner in the database
+The API accepts this activation only while the migrated owner record is marked `must_reset_password = true`. After success, the new bcrypt password hash is stored in Neon, the one-time flag is turned off, an audit entry is written, and a secure session is issued. The normal sign-in form should be used from then on.
 
-Open **SQL Editor** and run the following, replacing the email with the exact account email:
+Remove the `CERTIFICATE_BOOTSTRAP_TOKEN` Vercel environment variable after successful activation. Do not put it in GitHub, frontend configuration, or email.
 
-```sql
-insert into public.admin_users (user_id, email, role, is_active)
-select id, email, 'owner', true
-from auth.users
-where lower(email) = lower('YOUR-ADMIN-EMAIL@example.com')
-on conflict (user_id) do update
-set email = excluded.email, role = 'owner', is_active = true;
-```
+## Roles
 
-Confirm the record exists:
+| Role | Permission |
+|---|---|
+| owner | Full registry control, issue/reissue, manage certificate status and staff oversight |
+| admin | Issue/reissue, manage certificate status and oversee records |
+| issuer | Issue/reissue and view registry; cannot suspend, revoke or reactivate |
+| viewer | Read-only registry view with student contacts, private notes, status reason and evidence URL removed |
 
-```sql
-select user_id, email, role, is_active
-from public.admin_users
-order by created_at;
-```
+Role checks are performed by the Vercel API against `admin_users`; role information supplied by a browser is never trusted.
 
-Do not grant owner rights based on a browser form or a user-editable profile field. Only a trusted project owner should run this SQL.
+## Staff provisioning
 
-## 3. Add additional administrators
+Public administrator self-sign-up is not available. Add a new staff identity and matching `admin_users` row through a trusted, server-side owner procedure. Do not expose database credentials to the browser or ask a staff member to choose their own role.
 
-Create each account in Supabase Authentication first. Then run the following SQL with the exact email and chosen role:
+## Backend operations
 
-```sql
-insert into public.admin_users (user_id, email, role, is_active)
-select id, email, 'issuer', true
-from auth.users
-where lower(email) = lower('ISSUER-EMAIL@example.com')
-on conflict (user_id) do update
-set email = excluded.email, role = excluded.role, is_active = true;
-```
+- Neon database: `ethan_certificate`
+- Vercel API: `/api/certificate`
+- Required server-only variables: `DATABASE_URL`, `CERTIFICATE_BOOTSTRAP_TOKEN` (temporary)
+- Session cookie: HttpOnly, Secure, SameSite=Lax, eight-hour lifetime.
+- Public verification is unauthenticated but rate-limited and returns safe credential details only.
 
-Available roles after applying `database/migrations/001_global_credential_readiness.sql`:
+## Important migration note
 
-- `owner` — full control; maintain this role for the designated owner.
-- `admin` — issue certificates, manage status and oversee records.
-- `issuer` — issue/reissue and view records; cannot suspend, revoke or reactivate certificates.
-- `viewer` — read-only certificate registry access only; cannot view student contact records or activity logs.
-
-Do not assign `viewer` until the v1.1.1 database migration has been applied. The older v1.0.2 frontend does not understand the separated viewer permissions.
-
-
-## 4. Security rules
-
-- Disable public sign-up in Supabase Auth.
-- Use only the Supabase anon/publishable key in `config.js`.
-- Never paste a `service_role` or secret key into frontend files, GitHub, or Vercel environment variables exposed to the browser.
-- The database uses RLS and server-side RPC authorization. Do not add permissive `anon` table policies.
-- Enable MFA for owner accounts where available.
-- Keep a secure record of who is authorised to issue and revoke certificates.
+The prior Supabase project was retained as a rollback copy. The application code and public configuration no longer connect to Supabase. Do not delete the old Supabase project until the owner confirms that Neon sign-in, the certificate registry, issuance, status changes and public verification have all been checked.
