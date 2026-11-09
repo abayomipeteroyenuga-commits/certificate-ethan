@@ -1,40 +1,44 @@
-# ETHAN CERTIFICATE v1.1.1 — Production deployment checklist
+# ETHAN CERTIFICATE v1.2.0 — Production deployment checklist
 
-## Database upgrade
-- [ ] For an existing v1.0.2 deployment, run `database/migrations/001_global_credential_readiness.sql` once in Supabase SQL Editor.
-- [ ] If the original v1.1.0 migration 001 was already applied, run `database/migrations/002_restrict_internal_helpers.sql` to remove direct API execution from internal helper functions.
-- [ ] For a fresh project, run `database/schema.sql` (includes the v1.1.1 migration).
-- [ ] Confirm `get_admin_role()` returns `owner` for the provisioned owner.
-- [ ] Confirm owner/admin/issuer/viewer roles are assigned correctly.
-- [ ] Confirm public self-sign-up is disabled in Supabase Auth.
-- [ ] Enable Supabase leaked-password protection in Auth password security settings.
-- [ ] Run Supabase Security and Performance Advisors after the migration; review SECURITY DEFINER warnings and verify each RPC grant/role check.
-- [ ] Confirm only public verification RPC is callable by `anon`; administrative RPCs are restricted to `authenticated`. Internal role helpers `is_staff()` and `can_manage_certificates()` should not be directly executable by browser roles.
+## Neon backend
 
-## Deploy
-- [ ] Replace GitHub repository contents with the extracted v1.1.1 package contents.
-- [ ] Import/deploy in Vercel as a static site; no build command; output directory `.`.
-- [ ] Attach `certificate.ethandigitalacademy.org` and `verify.ethandigitalacademy.org` to the same project.
-- [ ] Wait for DNS and HTTPS to be active.
+- [x] Provision the dedicated Neon project and `ethan_certificate` database.
+- [x] Create the Neon schema, including users, roles, students, certificates, audit logs, verification logs, sessions and rate-limit tables.
+- [x] Copy the existing owner identity and role, student, certificate, audit and verification records into Neon with the original record UUIDs.
+- [x] Preserve the existing certificate number and verification token.
+- [x] Configure `DATABASE_URL` as a Sensitive server-side Vercel environment variable.
+- [x] Replace direct browser Supabase access with the same-origin Vercel API.
+- [ ] Complete first-time owner activation and confirm normal Neon sign-in.
+- [ ] Verify owner, admin, issuer and viewer role restrictions.
+- [ ] Verify issuance, reissue, suspension, revocation, reactivation and audit history.
+- [ ] Verify public lookup by certificate number and QR verification token.
+- [ ] Verify expired, suspended and revoked credential results.
+- [ ] Verify viewer responses omit student email/phone, private notes, status reasons and evidence URLs.
+- [ ] Remove the one-time `CERTIFICATE_BOOTSTRAP_TOKEN` variable after owner activation.
 
-## Role and session tests
-- [ ] Owner can issue, suspend, revoke, reactivate, export and view all required records.
-- [ ] Admin can issue and manage status.
-- [ ] Issuer can issue/reissue and export but cannot change status.
-- [ ] Viewer can view the safe certificate registry only; cannot issue, change status, export, access activity logs, or view student contact records.
-- [ ] Sign out is visible in the top bar and sidebar, including on mobile.
-- [ ] Sign out clears the current device session and returns to login.
-- [ ] Signing out in another tab/session triggers a return to login.
+## Vercel and domains
 
-## Credential tests
-- [ ] Issue a test credential with achievement description, criteria and skill tags.
-- [ ] Confirm public verification shows achievement metadata and no email, phone, private remarks or evidence URL.
-- [ ] Confirm an expired active record displays EXPIRED CERTIFICATE.
-- [ ] Confirm suspended and revoked records display the correct status.
-- [ ] Test reissue and confirm the original record remains linked.
-- [ ] Export the registry CSV and confirm it contains no student email or phone.
-- [ ] Download and inspect PDF, scan QR using a separate device.
+- [ ] Confirm the latest production deployment is READY.
+- [ ] Confirm `certificate.ethandigitalacademy.org` serves the updated Neon-backed app.
+- [ ] Confirm `verify.ethandigitalacademy.org` serves public certificate verification.
+- [ ] Confirm API requests to `/api/certificate` return JSON and are not rewritten to `index.html`.
+- [ ] Confirm the browser configuration contains no database connection string or Supabase publishable key.
 
-## Standards honesty and next phase
-- [ ] Do not claim Open Badges 3.0 or W3C VC 2.0 conformance until cryptographic proof and conformance tests are implemented.
-- [ ] Plan issuer key management, signed credentials, status/revocation proof, learner delivery/wallet, bulk issuance, credential analytics and 1EdTech conformance testing.
+## Rollback and retirement
+
+- [x] Keep the old Supabase project untouched as a temporary rollback copy.
+- [ ] After successful Neon validation and owner approval, retire the old Supabase project separately.
+- [ ] Do not delete the old backend until the owner explicitly confirms that rollback is no longer required.
+
+## Security
+
+- [ ] Confirm owner MFA and administrator recovery procedures.
+- [ ] Review server runtime logs for API or database errors.
+- [ ] Confirm API rate limits on login, bootstrap and public verification.
+- [ ] Confirm session cookies are Secure, HttpOnly and SameSite=Lax.
+- [ ] Complete a live browser test for owner, issuer and viewer access.
+- [ ] Review retention, consent, correction and privacy procedures for learner records.
+
+## Standards status
+
+The registry is metadata-ready and supports online verification, expiry, reissue, suspension, revocation and audit history. It does not yet issue cryptographically signed W3C Verifiable Credentials or Open Badges 3.0 credentials, is not 1EdTech-certified and does not claim blockchain or electronic-seal functionality.
