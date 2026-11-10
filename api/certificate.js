@@ -119,8 +119,9 @@ async function findSession(req, db) {
     'JOIN public.admin_users a ON a.user_id = u.id ' +
     'WHERE s.token_hash = $1 AND s.expires_at > now() ' +
     'AND u.is_active = true AND u.must_reset_password = false AND a.is_active = true ' +
+    'AND lower(u.email) = $2 ' +
     'LIMIT 1',
-    [hash]
+    [hash, ALLOWED_ADMIN_EMAIL]
   );
   if (!result.rows.length) return null;
   await db.query('UPDATE public.app_sessions SET last_seen_at = now() WHERE token_hash = $1', [hash]);
@@ -169,6 +170,7 @@ async function login(db, req, res, body) {
   const email = String(body.email || '').trim().toLowerCase();
   const password = String(body.password || '');
   if (!email || !password) throw new HttpError(400, 'Enter your administrator email and password.');
+  if (email !== ALLOWED_ADMIN_EMAIL) throw new HttpError(403, 'Access is restricted to the Ethan Digital Academy administrator.');
   const bucket = await checkRateLimit(db, 'login', getIp(req) + '|' + email, 8, '15 minutes');
   const result = await db.query(
     'SELECT u.id, u.email, u.password_hash, u.must_reset_password, u.is_active, a.role, a.is_active AS admin_active ' +
@@ -199,6 +201,7 @@ async function bootstrapOwner(db, req, res, body) {
   const email = String(body.email || '').trim().toLowerCase();
   const password = String(body.password || '');
   if (!email || password.length < 12) throw new HttpError(400, 'Enter your owner email and a new password of at least 12 characters.');
+  if (email !== ALLOWED_ADMIN_EMAIL) throw new HttpError(403, 'Only the authorised Ethan Digital Academy administrator can activate this account.');
   const bucket = await checkRateLimit(db, 'bootstrap', getIp(req) + '|' + email, 5, '15 minutes');
   const existing = await db.query(
     'SELECT u.id, u.email FROM public.app_users u ' +
