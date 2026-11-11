@@ -80,11 +80,15 @@ function readJsonBody(req, maxBytes = 1024 * 1024) {
   });
 }
 
-const VERIFY_PUBLIC_ORIGIN = 'https://verify.ethandigitalacademy.org';
+const VERIFY_PUBLIC_ORIGINS = new Set([
+  'https://verify.ethandigitalacademy.org',
+  'https://ethan-certificate-verifier.onrender.com'
+]);
 
 function setVerifyCors(req, res) {
-  if (req.headers.origin !== VERIFY_PUBLIC_ORIGIN) return false;
-  res.setHeader('Access-Control-Allow-Origin', VERIFY_PUBLIC_ORIGIN);
+  const origin = String(req.headers.origin || '');
+  if (!VERIFY_PUBLIC_ORIGINS.has(origin)) return false;
+  res.setHeader('Access-Control-Allow-Origin', origin);
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('Access-Control-Max-Age', '86400');
@@ -97,8 +101,7 @@ async function serveApi(req, res) {
 
   // Permit browser preflight only from the dedicated public verifier hostname.
   if (req.method === 'OPTIONS') {
-    if (origin !== VERIFY_PUBLIC_ORIGIN) return json(res, 403, { error: 'Request origin is not allowed.' });
-    setVerifyCors(req, res);
+    if (!setVerifyCors(req, res)) return json(res, 403, { error: 'Request origin is not allowed.' });
     res.writeHead(204);
     return res.end();
   }
@@ -111,7 +114,7 @@ async function serveApi(req, res) {
   }
 
   const isPublicVerification = req.body?.action === 'rpc' && req.body?.name === 'verify_certificate';
-  if (origin === VERIFY_PUBLIC_ORIGIN) {
+  if (VERIFY_PUBLIC_ORIGINS.has(origin)) {
     if (!isPublicVerification) return json(res, 403, { error: 'Only public certificate verification is available from this origin.' });
     setVerifyCors(req, res);
   }
