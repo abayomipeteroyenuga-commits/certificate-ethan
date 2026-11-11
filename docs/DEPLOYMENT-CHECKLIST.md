@@ -6,8 +6,8 @@
 - [x] Create the Neon schema, including users, roles, students, certificates, audit logs, verification logs, sessions and rate-limit tables.
 - [x] Copy the existing owner identity and role, student, certificate, audit and verification records into Neon with the original record UUIDs.
 - [x] Preserve the existing certificate number and verification token.
-- [x] Configure `DATABASE_URL` as a Sensitive server-side Vercel environment variable.
-- [x] Replace direct browser Supabase access with the same-origin Vercel API.
+- [x] Configure `DATABASE_URL` as a server-side Render environment variable.
+- [x] Replace direct browser Supabase access with the same-origin Render API.
 - [ ] Complete first-time owner activation and confirm normal Neon sign-in.
 - [ ] Verify owner, admin, issuer and viewer role restrictions.
 - [ ] Verify issuance, reissue, suspension, revocation, reactivation and audit history.
@@ -16,13 +16,17 @@
 - [ ] Verify viewer responses omit student email/phone, private notes, status reasons and evidence URLs.
 - [ ] Remove the one-time `CERTIFICATE_BOOTSTRAP_TOKEN` variable after owner activation.
 
-## Vercel and domains
+## Render deployment and domains
+- [x] Create `ethan-certificate` as a Node web service in Frankfurt.
+- [x] Deploy the latest Git commit; Render reports the deployment as live.
+- [x] Configure server-side `DATABASE_URL` and `CERTIFICATE_BOOTSTRAP_TOKEN`.
+- [ ] Set `/healthz` as the Render HTTP health-check path and verify a database-connected response.
 
 - [ ] Confirm the latest production deployment is READY.
-- [ ] Confirm `certificate.ethandigitalacademy.org` serves the updated Neon-backed app.
-- [ ] Confirm `verify.ethandigitalacademy.org` serves public certificate verification.
+- [ ] Add `certificate.ethandigitalacademy.org` to Render and point its DNS CNAME to `ethan-certificate.onrender.com`.
+- [ ] Add `verify.ethandigitalacademy.org` to the same Render service and point its DNS CNAME to `ethan-certificate.onrender.com`.
 - [ ] Confirm API requests to `/api/certificate` return JSON and are not rewritten to `index.html`.
-- [ ] Confirm the browser configuration contains no database connection string or Supabase publishable key.
+- [x] Confirm the browser configuration contains no database connection string or Supabase publishable key.
 
 ## Rollback and retirement
 
