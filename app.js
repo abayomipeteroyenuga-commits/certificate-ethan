@@ -6,7 +6,7 @@ const HAS_BACKEND = true;
 const state = {
   mode: 'preview', api: null, user: null, tab: 'overview', certificates: [], students: [], audit: [],
   lastIssued: null, reissueFrom: null, loading: false, publicMode: false, installPrompt: null,
-  adminRole: null, signingOut: false, demoData: null
+  adminRole: null, signingOut: false, demoData: null, bulkRows: [], bulkFileName: ''
 };
 
 const $ = (selector, root=document) => root.querySelector(selector);
@@ -80,8 +80,9 @@ async function loadExternalScript(src, globalName) {
 async function init() {
   window.addEventListener('beforeinstallprompt', event => { event.preventDefault(); state.installPrompt = event; });
   const params = new URLSearchParams(location.search);
+  const hasPublicQuery = params.has('verify') || params.has('number');
   const publicIdentifier = params.get('verify') || params.get('number') || '';
-  if (isVerifyHost || publicIdentifier) {
+  if (isVerifyHost || hasPublicQuery) {
     state.publicMode = true;
     await initNeonApiIfConfigured();
     renderPublicVerify(publicIdentifier);
@@ -307,6 +308,7 @@ function renderApp() {
         <nav class="nav-list">
           <button class="nav-item" data-tab="overview"><span class="nav-ico">▦</span>Overview</button>
           ${canIssue ? '<button class="nav-item" data-tab="issue"><span class="nav-ico">✚</span>Issue certificate</button>' : ''}
+          ${canIssue && state.mode === 'live' ? '<button class="nav-item" data-tab="bulk"><span class="nav-ico">▦</span>Bulk issue (CSV)</button>' : ''}
           <button class="nav-item" data-tab="registry"><span class="nav-ico">▤</span>Certificate registry</button>
           ${state.adminRole !== 'viewer' ? '<button class="nav-item" data-tab="students"><span class="nav-ico">♙</span>Students</button>' : ''}
           <button class="nav-item" data-tab="verify"><span class="nav-ico">⌕</span>Verify a certificate</button>
@@ -338,11 +340,12 @@ async function installApp() {
 }
 function renderPage() {
   if (state.tab === 'issue' && !canIssueCertificates()) { state.tab = 'overview'; toast('Your account is not permitted to issue certificates.','error'); }
+  if (state.tab === 'bulk' && (state.mode !== 'live' || !canIssueCertificates())) { state.tab = 'overview'; toast('CSV batch issuance requires an authorised live registry account.','error'); }
   if (state.tab === 'students' && state.adminRole === 'viewer') { state.tab = 'overview'; toast('Student contact records are restricted for read-only viewers.','error'); }
   if (state.tab === 'activity' && state.adminRole === 'viewer') { state.tab = 'overview'; toast('Activity logs are restricted to administrators and issuers.','error'); }
   $$('.nav-item',app).forEach(btn=>btn.classList.toggle('active',btn.dataset.tab===state.tab));
   const root=$('#page-root'); if(!root) return;
-  const pages={overview:renderOverview,issue:renderIssue,registry:renderRegistry,students:renderStudents,verify:renderVerifyAdmin,activity:renderActivity,settings:renderSettings};
+  const pages={overview:renderOverview,issue:renderIssue,bulk:renderBulkIssue,registry:renderRegistry,students:renderStudents,verify:renderVerifyAdmin,activity:renderActivity,settings:renderSettings};
   root.innerHTML=(pages[state.tab]||renderOverview)();
   bindPageEvents();
 }
@@ -402,6 +405,181 @@ function renderIssue() {
       </form>
     </section>`;
 }
+
+const BULK_CERTIFICATE_COLUMNS = [
+  'full_name','email','phone','award_title','programme_name','course_title','duration',
+  'date_completed','date_issued','grade','signatory_name','signatory_title','remarks',
+  'achievement_description','criteria_narrative','skills_tags','expiration_date','framework_alignment'
+];
+
+function csvParse(text) {
+  const input = String(text || '').replace(/^\uFEFF/, '');
+  const rows = [];
+  let row = [], field = '', quoted = false;
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i];
+    if (quoted) {
+      if (ch === '"' && input[i + 1] === '"') { field += '"'; i++; }
+      else if (ch === '"') quoted = false;
+      else field += ch;
+    } else if (ch === '"' && field.length === 0) quoted = true;
+    else if (ch === ',') { row.push(field); field = ''; }
+    else if (ch === '\n') { row.push(field.replace(/\r$/, '')); rows.push(row); row = []; field = ''; }
+    else field += ch;
+  }
+  if (quoted) throw new Error('The CSV file contains an unclosed quotation mark.');
+  if (field.length || row.length) { row.push(field.replace(/\r$/, '')); rows.push(row); }
+  return rows.filter(record => record.some(value => String(value || '').trim() !== ''));
+}
+
+function csvHeaderName(value) {
+  const header = String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  const aliases = {
+    student_name:'full_name', student_full_name:'full_name', recipient:'full_name', recipient_name:'full_name', name:'full_name',
+    student_email:'email', email_address:'email', student_phone:'phone', phone_number:'phone',
+    programme:'programme_name', program:'programme_name', programme_title:'programme_name',
+    course:'course_title', course_name:'course_title', specialisation:'course_title', specialization:'course_title',
+    completion_date:'date_completed', completed_date:'date_completed', issue_date:'date_issued', issued_date:'date_issued',
+    result:'grade', achievement:'grade', expiry_date:'expiration_date', expires_on:'expiration_date',
+    skills:'skills_tags', competencies:'skills_tags', criteria:'criteria_narrative', earning_criteria:'criteria_narrative',
+    achievement_summary:'achievement_description'
+  };
+  return aliases[header] || header;
+}
+
+function isValidIsoDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ''))) return false;
+  const date = new Date(String(value) + 'T00:00:00Z');
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+function createBulkRecord(row, rowNumber) {
+  const data = {};
+  BULK_CERTIFICATE_COLUMNS.forEach(column => { data[column] = String(row[column] ?? '').trim(); });
+  const errors = [];
+  if (!data.full_name) errors.push('Full name is required.');
+  if (!data.programme_name) errors.push('Programme name is required.');
+  if (!data.course_title) errors.push('Course title is required.');
+  if (data.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) errors.push('Email address is invalid.');
+  if (data.full_name.length > 140) errors.push('Full name is longer than 140 characters.');
+  if (data.programme_name.length > 180) errors.push('Programme name is longer than 180 characters.');
+  if (data.course_title.length > 180) errors.push('Course title is longer than 180 characters.');
+  const issueDate = data.date_issued || todayISO();
+  if (!isValidIsoDate(data.date_completed)) errors.push('Date completed must use YYYY-MM-DD.');
+  if (!isValidIsoDate(issueDate)) errors.push('Date issued must use YYYY-MM-DD.');
+  if (isValidIsoDate(data.date_completed) && isValidIsoDate(issueDate) && data.date_completed > issueDate) errors.push('Completion date cannot be after issue date.');
+  if (data.expiration_date && !isValidIsoDate(data.expiration_date)) errors.push('Expiry date must use YYYY-MM-DD.');
+  if (data.expiration_date && isValidIsoDate(issueDate) && isValidIsoDate(data.expiration_date) && data.expiration_date < issueDate) errors.push('Expiry date cannot be earlier than issue date.');
+  const allowedAwards = ['CERTIFICATE OF COMPLETION','CERTIFICATE OF ACHIEVEMENT','PROFESSIONAL CERTIFICATE','CERTIFICATE OF PARTICIPATION'];
+  const award = (data.award_title || 'CERTIFICATE OF COMPLETION').toUpperCase();
+  if (!allowedAwards.includes(award)) errors.push('Choose a supported certificate title.');
+  const payload = {
+    p_full_name:data.full_name, p_email:data.email || null, p_phone:data.phone || null, p_award_title:award,
+    p_programme_name:data.programme_name, p_course_title:data.course_title, p_duration:data.duration || null,
+    p_date_completed:data.date_completed, p_date_issued:issueDate, p_grade:data.grade || null,
+    p_remarks:data.remarks || null, p_signatory_name:data.signatory_name || CFG.defaultSignatory || 'Mr. Abayomi Peter Oyenuga',
+    p_signatory_title:data.signatory_title || CFG.defaultSignatoryTitle || 'Founder',
+    p_achievement_description:data.achievement_description || null, p_criteria_narrative:data.criteria_narrative || null,
+    p_skills_tags:data.skills_tags.split(/[;,]/).map(tag=>tag.trim()).filter(Boolean).slice(0,20),
+    p_evidence_url:null, p_expiration_date:data.expiration_date || null,
+    p_framework_alignment:data.framework_alignment || null, p_reissued_from:null
+  };
+  return {rowNumber,data,payload,errors,status:errors.length?'INVALID':'READY',certificateNumber:'',error:''};
+}
+
+function renderBulkIssue() {
+  const rows = state.bulkRows || [];
+  const ready = rows.filter(row=>row.status==='READY').length;
+  const invalid = rows.filter(row=>row.status==='INVALID').length;
+  const issued = rows.filter(row=>row.status==='ISSUED').length;
+  const failed = rows.filter(row=>row.status==='FAILED').length;
+  const table = rows.length
+    ? '<div class="bulk-table-wrap"><table class="bulk-table"><thead><tr><th>Row</th><th>Recipient</th><th>Programme / course</th><th>Result</th></tr></thead><tbody>' +
+      rows.map(row => '<tr><td>' + row.rowNumber + '</td><td><b>' + esc(row.data.full_name || '—') + '</b><small>' + esc(row.data.email || '') + '</small></td><td>' + esc(row.data.programme_name || '—') + '<small>' + esc(row.data.course_title || '') + '</small></td><td><span class="bulk-status ' + row.status.toLowerCase() + '">' + esc(row.status) + '</span>' +
+        (row.certificateNumber ? '<small class="bulk-success-id">' + esc(row.certificateNumber) + '</small>' : '') +
+        (row.errors.length ? '<small class="bulk-error">' + esc(row.errors.join(' ')) + '</small>' : row.error ? '<small class="bulk-error">' + esc(row.error) + '</small>' : '') +
+        '</td></tr>').join('') + '</tbody></table></div>'
+    : '<div class="empty-state"><div class="empty-icon">▦</div><strong>No CSV loaded</strong>Choose a CSV file to validate certificate recipients before issuance.</div>';
+  return pageHead('BATCH CERTIFICATE MANAGEMENT','Bulk certificate issuance','Import a CSV file, review every row and issue certificates through the same secure registry workflow.','<button class="btn btn-outline" id="download-bulk-template">↓ Download CSV template</button>') +
+    demoNotice() +
+    '<div class="bulk-guidance"><div class="bulk-guidance-icon">✓</div><div><b>Controlled batch issuance</b><p>Upload up to 50 rows at a time. Every row is validated before any certificate is issued. Successful records receive unique IDs and audit entries in Neon.</p></div></div>' +
+    '<section class="panel panel-pad bulk-upload-panel"><div class="section-head"><div><h3>1. Upload recipient list</h3><p>Use the provided CSV template. Dates must be formatted as YYYY-MM-DD.</p></div><span class="pill pill-blue">Maximum 50 rows</span></div>' +
+    '<div class="bulk-upload-area"><div class="bulk-upload-symbol">↑</div><div><b>Select a CSV file</b><small>Comma-separated values · UTF-8 · Up to 50 certificates</small></div><input type="file" id="bulk-csv-file" accept=".csv,text/csv" aria-label="Choose certificate CSV file"></div>' +
+    '<div class="bulk-upload-help">Required columns: <code>full_name</code>, <code>programme_name</code>, <code>course_title</code>, <code>date_completed</code>. The issue date defaults to today when left blank.</div>' +
+    (state.bulkFileName ? '<div class="bulk-file-meta"><span>Loaded file: <b>' + esc(state.bulkFileName) + '</b></span><button class="btn btn-outline btn-small" id="clear-bulk">Clear file</button></div>' : '') +
+    '</section>' +
+    (rows.length ? '<section class="panel panel-pad bulk-preview-panel"><div class="section-head"><div><h3>2. Review and issue</h3><p>Rows with errors will be skipped; correct those rows and re-upload them separately.</p></div><div class="bulk-summary-chips"><span>' + rows.length + ' rows</span><span class="good">' + ready + ' ready</span><span class="bad">' + invalid + ' invalid</span><span class="done">' + issued + ' issued</span>' + (failed?'<span class="bad">' + failed + ' failed</span>':'') + '</div></div>' +
+    table + '<div class="bulk-actions"><div class="bulk-progress-text" id="bulk-progress-text">' + (issued || failed ? issued + ' issued · ' + failed + ' failed' : ready + ' certificate(s) ready to issue') + '</div><div class="bulk-action-buttons"><button class="btn btn-outline btn-small" id="download-bulk-results" ' + (issued+failed===0?'disabled':'') + '>Download results</button><button class="btn btn-primary" id="issue-bulk-certificates" ' + (ready===0?'disabled':'') + '>Issue ' + ready + ' certificate(s) <span>→</span></button></div></div></section>' : '') +
+    '<div class="bulk-security-note"><b>Important:</b> issuing creates official records and QR verification links immediately. Confirm recipient names, programme titles and completion dates before starting. Records are issued one by one; each can later be suspended or revoked with an audit reason.</div>';
+}
+
+function downloadBulkTemplate() {
+  const csv = '\ufeff' + BULK_CERTIFICATE_COLUMNS.join(',') + '\r\n';
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href=url; link.download='ethan-certificate-bulk-issue-template.csv';
+  document.body.appendChild(link); link.click(); link.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+function downloadBulkResults() {
+  const headers=['CSV row','Recipient','Email','Programme','Course','Status','Certificate number','Error'];
+  const rows=(state.bulkRows||[]).map(item=>[item.rowNumber,item.data.full_name,item.data.email,item.data.programme_name,item.data.course_title,item.status,item.certificateNumber,item.errors.join(' ')||item.error]);
+  const csv='\ufeff'+[headers,...rows].map(row=>row.map(value=>'"'+String(value??'').replace(/"/g,'""')+'"').join(',')).join('\r\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);const link=document.createElement('a');
+  link.href=url;link.download='ethan-certificate-batch-results-'+todayISO()+'.csv';
+  document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+async function loadBulkCsv(file) {
+  if(!file)return;
+  if(!/\.csv$/i.test(file.name)&&file.type!=='text/csv'){toast('Choose a CSV file.','error');return;}
+  try {
+    const records=csvParse(await file.text());
+    if(records.length<2)throw new Error('The CSV needs a header row and at least one recipient row.');
+    const headers=records[0].map(csvHeaderName);
+    if(new Set(headers).size!==headers.length)throw new Error('The CSV contains duplicate column headings.');
+    const missing=['full_name','programme_name','course_title','date_completed'].filter(column=>!headers.includes(column));
+    if(missing.length)throw new Error('Missing required columns: '+missing.join(', ')+'.');
+    const rows=records.slice(1);
+    if(rows.length>50)throw new Error('A maximum of 50 certificate rows can be uploaded at a time.');
+    state.bulkRows=rows.map((values,index)=>{
+      const row={};headers.forEach((header,position)=>{row[header]=values[position]||'';});
+      return createBulkRecord(row,index+2);
+    });
+    state.bulkFileName=file.name;
+    renderPage();
+    toast('CSV checked: '+state.bulkRows.filter(row=>row.status==='READY').length+' ready, '+state.bulkRows.filter(row=>row.status==='INVALID').length+' with errors.','success');
+  } catch(error){toast(error.message||'Could not read this CSV file.','error');}
+}
+
+async function issueBulkCertificates() {
+  if(state.mode!=='live'||!canIssueCertificates()){toast('Sign in with an authorised registry account first.','error');return;}
+  const ready=state.bulkRows.filter(row=>row.status==='READY');
+  if(!ready.length){toast('There are no validated rows ready to issue.','error');return;}
+  if(!confirm('You are about to issue '+ready.length+' official Ethan Digital Academy certificate(s). Continue only after checking every recipient and date.'))return;
+  const button=$('#issue-bulk-certificates');
+  if(button){button.disabled=true;button.textContent='Issuing batch…';}
+  let successCount=0,failureCount=0;
+  for(const item of ready){
+    try{
+      const result=await state.api.rpc('issue_certificate_v2',item.payload);
+      if(result.error)throw result.error;
+      const cert=Array.isArray(result.data)?result.data[0]:result.data;
+      if(!cert||!cert.certificate_number)throw new Error('The registry did not return a certificate number.');
+      item.status='ISSUED';item.certificateNumber=cert.certificate_number;successCount++;
+    }catch(error){item.status='FAILED';item.error=error.message||'Issuance failed.';failureCount++;}
+    const progress=$('#bulk-progress-text');
+    if(progress)progress.textContent='Processing '+(successCount+failureCount)+' of '+ready.length+' · '+successCount+' issued · '+failureCount+' failed';
+    if(button)button.textContent='Issuing '+(successCount+failureCount)+'/'+ready.length+'…';
+  }
+  try{await loadAdminData();}catch(error){toast('Batch completed, but dashboard refresh failed: '+error.message,'error');}
+  renderPage();
+  toast('Batch complete: '+successCount+' issued, '+failureCount+' failed.',failureCount?'error':'success');
+}
+
 function renderRegistry() {
   const rows=state.certificates;
   return `${pageHead('OFFICIAL RECORDS','Certificate registry','Search, view, download or change the status of issued certificates.',canIssueCertificates()?`<button class="btn btn-primary" data-tab="issue">＋ Issue certificate</button>`:'')}${demoNotice()}
@@ -461,6 +639,11 @@ function bindPageEvents() {
   $$('[data-tab]', $('#page-root')).forEach(btn=>btn.addEventListener('click',()=>{state.tab=btn.dataset.tab;renderPage();}));
   $('#issue-form')?.addEventListener('submit',handleIssueSubmit);
   $('#cancel-reissue')?.addEventListener('click',()=>{state.reissueFrom=null;renderPage();});
+  $('#download-bulk-template')?.addEventListener('click',downloadBulkTemplate);
+  $('#bulk-csv-file')?.addEventListener('change',event=>loadBulkCsv(event.target.files?.[0]));
+  $('#clear-bulk')?.addEventListener('click',()=>{state.bulkRows=[];state.bulkFileName='';renderPage();});
+  $('#issue-bulk-certificates')?.addEventListener('click',issueBulkCertificates);
+  $('#download-bulk-results')?.addEventListener('click',downloadBulkResults);
   $('#registry-search')?.addEventListener('input',event=>{const q=event.target.value.toLowerCase();const rows=state.certificates.filter(c=>[recipientName(c),c.certificate_number,c.programme_name,c.course_title,recipientEmail(c)].join(' ').toLowerCase().includes(q));$('#registry-table').innerHTML=registryTable(rows);bindRegistryActions();});
   $('#students-search')?.addEventListener('input',event=>{const q=event.target.value.toLowerCase();const rows=state.students.filter(s=>[s.full_name,s.email,s.phone].join(' ').toLowerCase().includes(q));$('#students-table').innerHTML=studentsTable(rows);});
   $('#refresh-registry')?.addEventListener('click',async()=>{try{await loadAdminData();renderPage();toast('Registry refreshed.','success')}catch(e){toast(e.message,'error')}});
