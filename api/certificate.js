@@ -439,7 +439,8 @@ async function verifyCertificate(db, req, identifier) {
 
 async function handleAction(req, res, db, body) {
   const action = String(body.action || '');
-  if (action !== 'verify') safeOrigin(req);
+  const isPublicVerification = action === 'rpc' && body.name === 'verify_certificate';
+  if (action !== 'verify' && !isPublicVerification) safeOrigin(req);
   if (action === 'login') return { user: (await login(db, req, res, body)).user };
   if (action === 'bootstrap') return await bootstrapOwner(db, req, res, body);
   if (action === 'session') {
