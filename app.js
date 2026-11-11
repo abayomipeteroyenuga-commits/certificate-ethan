@@ -106,7 +106,8 @@ async function init() {
   } else renderLogin();
 }
 async function certificateApiCall(action, payload={}) {
-  const endpoint = (CFG.apiBaseUrl || '') + '/api/certificate';
+  const apiOrigin = (isVerifyHost && !CFG.apiBaseUrl) ? 'https://ethan-certificate.onrender.com' : (CFG.apiBaseUrl || '');
+  const endpoint = apiOrigin + '/api/certificate';
   const response = await fetch(endpoint, {
     method: 'POST',
     credentials: 'same-origin',
