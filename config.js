@@ -6,7 +6,7 @@
 window.ETHAN_CERT_CONFIG = {
   apiBaseUrl: "",
   appUrl: "https://certificate.ethandigitalacademy.org",
-  verifyUrl: "https://verify.ethandigitalacademy.org",
+  verifyUrl: "https://certificate.ethandigitalacademy.org",
   issuerName: "Ethan Digital Academy",
   issuerParent: "ALLON-MAADIAH INTERNATIONAL LIMITED",
   issuerRc: "1364788",
