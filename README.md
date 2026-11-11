@@ -5,11 +5,11 @@
 **Parent company:** ALLON-MAADIAH INTERNATIONAL LIMITED (RC 1364788)  
 **Tagline:** Issue. Verify. Authenticate.  
 **Admin URL:** https://certificate.ethandigitalacademy.org  
-**Public verification URL:** https://certificate.ethandigitalacademy.org/?verify=EDA-CERT-YYYY-000001
+**Public verification URL:** https://verify.ethandigitalacademy.org/?verify=EDA-CERT-YYYY-000001
 
 ## Backend
 
-Ethan Certificate now uses a dedicated **Neon PostgreSQL** database. The browser communicates only with the same-origin Vercel API at `/api/certificate`. Neon credentials are held in Vercel server-side environment variables and are never included in public JavaScript.
+Ethan Certificate now uses a dedicated **Neon PostgreSQL** database. The browser communicates only with the same-origin Render web-service API at `/api/certificate`. Neon credentials are held in Render server-side environment variables and are never included in public JavaScript.
 
 The Neon database is provisioned as `ETHAN CERTIFICATE`, database `ethan_certificate`. The schema is documented in `database/schema.sql`.
 
@@ -35,9 +35,9 @@ The original Supabase project has been left untouched as a temporary rollback co
 - Every issuance, reissue, status update and one-time owner activation creates an audit entry.
 - No public administrator self-sign-up is provided.
 
-## Vercel environment variables
+## Render environment variables
 
-Set the following on the Vercel project for Production and Preview:
+Set the following on the `ethan-certificate` Render web service:
 
 - `DATABASE_URL` — Neon pooled PostgreSQL connection string (Sensitive).
 - `CERTIFICATE_BOOTSTRAP_TOKEN` — one-time owner activation key (Sensitive; remove after the owner has activated their account).
@@ -68,11 +68,11 @@ The batch is not a browser-only preview and does not bypass the owner's/issuer's
 
 ## Public verification links
 
-New certificate QR codes use the attached canonical domain, `https://certificate.ethandigitalacademy.org/?verify=...`. The app now opens the public verifier even when the query parameter is initially empty.
+New certificate QR codes use the public verification alias, `https://verify.ethandigitalacademy.org/?verify=...`. The app now opens the public verifier even when the query parameter is initially empty.
 
 ## Deployment
 
-The project is a static frontend plus a Vercel Node API under `api/`. Vercel installs the pinned `pg` and `bcryptjs` dependencies. The production domain remains attached to this project. The PWA service-worker cache key is versioned to refresh installed clients when app assets are updated.
+The project is served by a Render Node web service (`server.js`) which serves the static frontend and routes `/api/certificate` to the Node API in `api/`. Render installs the pinned `pg` and `bcryptjs` dependencies. Add both `certificate.ethandigitalacademy.org` and `verify.ethandigitalacademy.org` to the Render service as custom domains. The PWA service-worker cache key is versioned to refresh installed clients when app assets are updated.
 
 ## Certificate standards status
 
