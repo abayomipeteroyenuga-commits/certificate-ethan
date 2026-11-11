@@ -1,7 +1,7 @@
 ETHAN CERTIFICATE v2.0.0
-Backend: Neon PostgreSQL with same-origin Vercel server API
-Frontend: responsive PWA served by Vercel
-API: Vercel Node function at /api/certificate
+Backend: Neon PostgreSQL with same-origin Render web-service API
+Frontend: responsive PWA served by Render Node web service
+API: Node API mounted at /api/certificate in server.js
 Database: Neon project ETHAN CERTIFICATE / database ethan_certificate
 Tables: app_users, admin_users, students, certificates, audit_logs, verification_logs, app_sessions, request_limits
 Authentication: bcrypt password hashes, server-side role enforcement, secure HttpOnly sessions
@@ -9,6 +9,6 @@ Authorisation: owner email allowlist enforced in the API session, login and boot
 Roles: owner role retained; no public administrator self-sign-up
 Migration: owner identity, student profile, certificate, audit and verification data retained in Neon
 New: controlled CSV batch issuance, up to 50 certificate rows per upload, sequential server-side issuance, validation preview and CSV result report
-Fix: public verification route recognises an empty ?verify= query; new QR codes link to the attached certificate.ethandigitalacademy.org domain
+Fix: public verification route recognises an empty ?verify= query; new QR codes link to the attached verify.ethandigitalacademy.org domain
 PWA: service-worker cache bumped to v2.0.0 to replace old installed assets
 Certificate data: unchanged by this frontend and API update
