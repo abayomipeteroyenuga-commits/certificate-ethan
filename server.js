@@ -87,6 +87,15 @@ async function serveApi(req, res) {
   } catch (error) {
     return json(res, error.status || 400, { error: error.message || 'Invalid request.' });
   }
+
+  // The Railway verification host serves the same public UI but must never
+  // expose owner setup, sign-in, registry, issuance, or status-management APIs.
+  if (String(process.env.VERIFY_ONLY || '').toLowerCase() === 'true') {
+    const isPublicVerification = req.body?.action === 'rpc' && req.body?.name === 'verify_certificate';
+    if (!isPublicVerification) {
+      return json(res, 404, { error: 'This host is reserved for public certificate verification.' });
+    }
+  }
   return certificateApi(req, res);
 }
 
