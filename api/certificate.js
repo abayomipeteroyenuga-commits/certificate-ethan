@@ -2,6 +2,9 @@ const crypto = require('node:crypto');
 const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 
+// The single migrated owner account allowed to administer Ethan Certificate.
+const ALLOWED_ADMIN_EMAIL = 'abayomipeteroyenuga@gmail.com';
+
 let pool;
 function getPool() {
   if (pool) return pool;
