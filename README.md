@@ -54,9 +54,25 @@ Do not expose either variable using a `VITE_`, `NEXT_PUBLIC_` or other client-pr
 
 The migration does not provide public sign-up or a password reset email flow. Future staff accounts must be provisioned by the application owner through a trusted administrative procedure.
 
+## Batch issuance (v2.0)
+
+Authorised staff with certificate-issuing permission can open **Bulk issue (CSV)** from the registry workspace.
+
+- Download the supplied CSV template and prepare up to 50 recipients per file.
+- Required columns: `full_name`, `programme_name`, `course_title` and `date_completed`.
+- Optional fields include email, phone, certificate title, duration, issue date, grade, signatory details, remarks, achievement description, earning criteria, skills, expiry date and framework alignment.
+- The import is validated before issuing. Invalid rows are flagged; valid rows are issued one at a time through the same authenticated Neon API used by individual issuance.
+- Each successful certificate receives its own unique registry number, QR verification URL and audit event. A results CSV records issued certificate numbers and any failed rows.
+
+The batch is not a browser-only preview and does not bypass the owner's/issuer's normal permissions. Review all recipient details before confirming issuance.
+
+## Public verification links
+
+New certificate QR codes use the attached canonical domain, `https://certificate.ethandigitalacademy.org/?verify=...`. The app now opens the public verifier even when the query parameter is initially empty.
+
 ## Deployment
 
-The project is a static frontend plus a Vercel Node API under `api/`. Vercel installs the pinned `pg` and `bcryptjs` dependencies. The public certificate and verification domains remain attached to this project.
+The project is a static frontend plus a Vercel Node API under `api/`. Vercel installs the pinned `pg` and `bcryptjs` dependencies. The production domain remains attached to this project. The PWA service-worker cache key is versioned to refresh installed clients when app assets are updated.
 
 ## Certificate standards status
 
