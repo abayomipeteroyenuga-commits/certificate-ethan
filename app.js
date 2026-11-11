@@ -92,7 +92,9 @@ async function init() {
   if (HAS_BACKEND) {
     try {
       await initNeonApiIfConfigured();
-      const {data:{session}} = await state.api.auth.getSession();
+      const sessionResult = await state.api.auth.getSession();
+      if (sessionResult?.error) throw sessionResult.error;
+      const session = sessionResult?.data?.session || null;
       if (session) {
         state.user = session.user; state.mode = 'live';
         const {data:role,error:roleError}=await state.api.rpc('get_admin_role');
