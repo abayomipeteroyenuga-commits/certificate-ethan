@@ -1,11 +1,11 @@
-# ETHAN CERTIFICATE v1.2.0 — Neon Edition
+# ETHAN CERTIFICATE v2.0.0 — Neon Edition
 
 **Product:** ETHAN CERTIFICATE  
 **Issuer:** Ethan Digital Academy  
 **Parent company:** ALLON-MAADIAH INTERNATIONAL LIMITED (RC 1364788)  
 **Tagline:** Issue. Verify. Authenticate.  
 **Admin URL:** https://certificate.ethandigitalacademy.org  
-**Public verification URL:** https://verify.ethandigitalacademy.org
+**Public verification URL:** https://certificate.ethandigitalacademy.org/?verify=EDA-CERT-YYYY-000001
 
 ## Backend
 
