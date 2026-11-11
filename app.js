@@ -93,8 +93,11 @@ async function init() {
     try {
       await initNeonApiIfConfigured();
       const sessionResult = await state.api.auth.getSession();
-      if (sessionResult?.error) throw sessionResult.error;
-      const session = sessionResult?.data?.session || null;
+      if (sessionResult && sessionResult.error) throw sessionResult.error;
+      const sessionData = sessionResult && sessionResult.data && typeof sessionResult.data === 'object'
+        ? sessionResult.data
+        : {};
+      const session = sessionData.session || null;
       if (session) {
         state.user = session.user; state.mode = 'live';
         const {data:role,error:roleError}=await state.api.rpc('get_admin_role');
@@ -127,7 +130,15 @@ function certificateApiResult(promise) {
 function createCertificateApiClient() {
   return {
     auth: {
-      getSession: () => certificateApiResult(certificateApiCall('session').then(data => ({ session: data?.session || null }))),
+      getSession: async () => {
+        try {
+          const response = await certificateApiCall('session');
+          const session = response && typeof response === 'object' ? (response.session || null) : null;
+          return { data: { session }, error: null };
+        } catch (error) {
+          return { data: { session: null }, error };
+        }
+      },
       signInWithPassword: ({ email, password }) => certificateApiResult(certificateApiCall('login', { email, password }).then(data => ({ user: data?.user || null }))),
       signOut: () => certificateApiResult(certificateApiCall('logout')),
       onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } })
