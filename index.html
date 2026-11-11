@@ -17,11 +17,27 @@
     <div class="boot-screen"><div class="boot-mark">ED</div><div class="boot-title">ETHAN CERTIFICATE</div><div class="boot-sub">Preparing secure certificate services…</div></div>
   </div>
   <div id="toast-container" aria-live="polite" aria-atomic="true"></div>
-  <script src="/config.js"></script>
-  <script type="module" src="/app.js"></script>
+  <script src="/config.js?v=20261111-session-recovery-2"></script>
+  <script type="module" src="/app.js?v=20261111-session-recovery-2"></script>
   <script>
     if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-      window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+      let refreshingForWorkerUpdate = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (refreshingForWorkerUpdate) return;
+        refreshingForWorkerUpdate = true;
+        window.location.reload();
+      });
+      window.addEventListener('load', async () => {
+        try {
+          const registration = await navigator.serviceWorker.register(
+            '/sw.js?v=20261111-session-recovery-2',
+            { updateViaCache: 'none' }
+          );
+          await registration.update();
+        } catch (_) {
+          // The certificate registry remains usable if offline app installation is unavailable.
+        }
+      });
     }
   </script>
 
