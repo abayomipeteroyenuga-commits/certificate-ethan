@@ -860,7 +860,7 @@ async function loadQrCodeLibrary() {
 async function renderCertificateQr(qr) {
   if (!qr) throw new Error('The certificate QR area is missing.');
   const verifyUrl = String(qr.dataset.verifyUrl || '');
-  const expectedBase = String(CFG.verifyUrl || 'https://verify.ethandigitalacademy.org').replace(/\\/$/, '');
+  const expectedBase = String(CFG.verifyUrl || 'https://verify.ethandigitalacademy.org').replace(/\/$/, '');
   if (!verifyUrl.startsWith(expectedBase + '/?verify=')) {
     throw new Error('The certificate verification link is invalid.');
   }
