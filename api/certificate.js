@@ -19,7 +19,7 @@ function getPool() {
     max: 5,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000,
-    application_name: 'ethan-certificate-vercel'
+    application_name: 'ethan-certificate-render'
   });
   return pool;
 }
