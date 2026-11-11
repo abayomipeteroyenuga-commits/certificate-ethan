@@ -72,7 +72,19 @@ New certificate QR codes use the public verification alias, `https://verify.etha
 
 ## Deployment
 
-The project is served by a Render Node web service (`server.js`) which serves the static frontend and routes `/api/certificate` to the Node API in `api/`. Render installs the pinned `pg` and `bcryptjs` dependencies. Add both `certificate.ethandigitalacademy.org` and `verify.ethandigitalacademy.org` to the Render service as custom domains. The PWA service-worker cache key is versioned to refresh installed clients when app assets are updated.
+The main administration application runs on the Render Node web service (`server.js`) at `https://certificate.ethandigitalacademy.org`. It serves the frontend and the Node API in `api/`, using the shared Neon database.
+
+The public verification hostname is designed to run as a separate Railway web service from this same repository at `https://verify.ethandigitalacademy.org`. Configure the Railway service with:
+
+- `DATABASE_URL` — the same Neon pooled PostgreSQL connection string (Sensitive).
+- `VERIFY_ONLY=true` — enables verification-only API protection on that service.
+- Do **not** set `CERTIFICATE_BOOTSTRAP_TOKEN` on the verification service.
+
+Both services use `npm install` and `npm start`. Railway supplies the port through `PORT`; the Node server binds to `0.0.0.0`. Add `verify.ethandigitalacademy.org` as a custom domain on the Railway service and use the exact CNAME target Railway returns in Spaceship DNS.
+
+When `VERIFY_ONLY=true`, the service permits only the public `verify_certificate` API operation. It rejects login, owner bootstrap, registry, student, issuance, status-change and other administrative API actions. The verification UI detects the `verify.` hostname and links administrators back to the Render-hosted main app. Keep `certificate.ethandigitalacademy.org` on Render.
+
+The PWA service-worker cache key is versioned to refresh installed clients when app assets are updated.
 
 ## Certificate standards status
 
