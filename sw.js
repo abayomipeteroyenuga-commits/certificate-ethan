@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ethan-certificate-v1.2.0-neon-shell';
+const CACHE_NAME = 'ethan-certificate-v2.0.0-neon-shell';
 const APP_SHELL = [
   '/', '/index.html', '/styles.css', '/app.js', '/config.js', '/manifest.webmanifest',
   '/assets/icon-192.png', '/assets/icon-512.png', '/assets/ethan-certificate-logo.png', '/assets/ethan-digital-academy-logo.png', '/assets/certificate-seal.svg'
