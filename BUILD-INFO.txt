@@ -1,12 +1,14 @@
-ETHAN CERTIFICATE v1.2.0
-Backend cutover: Supabase -> Neon PostgreSQL
-Frontend: static PWA served by Vercel
+ETHAN CERTIFICATE v2.0.0
+Backend: Neon PostgreSQL with same-origin Vercel server API
+Frontend: responsive PWA served by Vercel
 API: Vercel Node function at /api/certificate
 Database: Neon project ETHAN CERTIFICATE / database ethan_certificate
 Tables: app_users, admin_users, students, certificates, audit_logs, verification_logs, app_sessions, request_limits
 Authentication: bcrypt password hashes, server-side role enforcement, secure HttpOnly sessions
-Roles: owner, admin, issuer, viewer
-Migration: 1 user identity, 1 admin role, 1 student, 1 certificate, 1 audit record, 1 verification log copied with original UUIDs and certificate verification token
-Password migration: Supabase password hashes were not exported; the owner must complete one-time Neon password setup
-Rollback: previous Supabase project remains intact temporarily; application source no longer uses Supabase
-No public administrator self-sign-up
+Authorisation: owner email allowlist enforced in the API session, login and bootstrap paths
+Roles: owner role retained; no public administrator self-sign-up
+Migration: owner identity, student profile, certificate, audit and verification data retained in Neon
+New: controlled CSV batch issuance, up to 50 certificate rows per upload, sequential server-side issuance, validation preview and CSV result report
+Fix: public verification route recognises an empty ?verify= query; new QR codes link to the attached certificate.ethandigitalacademy.org domain
+PWA: service-worker cache bumped to v2.0.0 to replace old installed assets
+Certificate data: unchanged by this frontend and API update
