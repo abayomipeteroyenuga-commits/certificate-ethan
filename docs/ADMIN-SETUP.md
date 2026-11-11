@@ -12,7 +12,7 @@ The owner identity and role were migrated into Neon, but the previous Supabase p
 
 The API accepts this activation only while the migrated owner record is marked `must_reset_password = true`. After success, the new bcrypt password hash is stored in Neon, the one-time flag is turned off, an audit entry is written, and a secure session is issued. The normal sign-in form should be used from then on.
 
-Remove the `CERTIFICATE_BOOTSTRAP_TOKEN` Vercel environment variable after successful activation. Do not put it in GitHub, frontend configuration, or email.
+Remove the `CERTIFICATE_BOOTSTRAP_TOKEN` Render environment variable after successful activation. Do not put it in GitHub, frontend configuration, or email.
 
 ## Roles
 
@@ -23,7 +23,7 @@ Remove the `CERTIFICATE_BOOTSTRAP_TOKEN` Vercel environment variable after succe
 | issuer | Issue/reissue and view registry; cannot suspend, revoke or reactivate |
 | viewer | Read-only registry view with student contacts, private notes, status reason and evidence URL removed |
 
-Role checks are performed by the Vercel API against `admin_users`; role information supplied by a browser is never trusted.
+Role checks are performed by the Render API against `admin_users`; role information supplied by a browser is never trusted.
 
 ## Staff provisioning
 
@@ -32,7 +32,7 @@ Public administrator self-sign-up is not available. Add a new staff identity and
 ## Backend operations
 
 - Neon database: `ethan_certificate`
-- Vercel API: `/api/certificate`
+- Render Node API: `/api/certificate`
 - Required server-only variables: `DATABASE_URL`, `CERTIFICATE_BOOTSTRAP_TOKEN` (temporary)
 - Session cookie: HttpOnly, Secure, SameSite=Lax, eight-hour lifetime.
 - Public verification is unauthenticated but rate-limited and returns safe credential details only.
