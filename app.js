@@ -848,18 +848,65 @@ function buildCertificateMarkup(c) {
     </div>
   </div>`;
 }
+async function loadQrCodeLibrary() {
+  try {
+    await loadExternalScript('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js', 'QRCode');
+  } catch (primaryError) {
+    await loadExternalScript('https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js', 'QRCode');
+  }
+  if (typeof window.QRCode !== 'function') throw new Error('The QR generator did not initialise.');
+}
+
+async function renderCertificateQr(qr) {
+  if (!qr) throw new Error('The certificate QR area is missing.');
+  const verifyUrl = String(qr.dataset.verifyUrl || '');
+  const expectedBase = String(CFG.verifyUrl || 'https://verify.ethandigitalacademy.org').replace(/\\/$/, '');
+  if (!verifyUrl.startsWith(expectedBase + '/?verify=')) {
+    throw new Error('The certificate verification link is invalid.');
+  }
+  await loadQrCodeLibrary();
+  qr.replaceChildren();
+  new window.QRCode(qr, {
+    text: verifyUrl,
+    width: 200,
+    height: 200,
+    colorDark: '#102b55',
+    colorLight: '#ffffff',
+    correctLevel: window.QRCode.CorrectLevel.M
+  });
+  const rendered = qr.querySelector('canvas, img');
+  if (!rendered) throw new Error('The QR image could not be rendered.');
+  qr.dataset.qrReady = 'true';
+  qr.setAttribute('aria-label', 'Scan to verify this certificate online');
+  return verifyUrl;
+}
+
 async function openCertificate(c) {
   const backdrop=document.createElement('div');backdrop.className='modal-backdrop';backdrop.id='certificate-modal';
-  backdrop.innerHTML=`<div class="modal"><div class="modal-head"><h3>Certificate preview · ${esc(c.certificate_number||'')}</h3><div class="modal-actions"><button class="btn btn-primary btn-small" id="download-certificate-pdf">Download PDF</button><button class="btn btn-outline btn-small" id="print-certificate">Print</button><button class="icon-btn" id="close-certificate" aria-label="Close">×</button></div></div><div class="modal-body">${buildCertificateMarkup(c)}</div></div>`;
+  backdrop.innerHTML=`<div class="modal"><div class="modal-head"><h3>Certificate preview · ${esc(c.certificate_number||'')}</h3><div class="modal-actions"><button class="btn btn-primary btn-small" id="download-certificate-pdf" disabled>Preparing QR…</button><button class="btn btn-outline btn-small" id="print-certificate" disabled>Preparing QR…</button><button class="icon-btn" id="close-certificate" aria-label="Close">×</button></div></div><div class="modal-body">${buildCertificateMarkup(c)}</div></div>`;
   document.body.appendChild(backdrop);
   $('#close-certificate',backdrop).addEventListener('click',()=>backdrop.remove());
   backdrop.addEventListener('click',event=>{if(event.target===backdrop)backdrop.remove();});
-  $('#print-certificate',backdrop).addEventListener('click',()=>window.print());
-  $('#download-certificate-pdf',backdrop).addEventListener('click',()=>downloadCertificatePdf(c));
+  const printButton = $('#print-certificate',backdrop);
+  const downloadButton = $('#download-certificate-pdf',backdrop);
+  printButton.addEventListener('click',()=>window.print());
+  downloadButton.addEventListener('click',()=>downloadCertificatePdf(c));
   try {
-    await loadExternalScript('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js','QRCode');
-    const qr=$('#certificateQr',backdrop);if(qr && window.QRCode){new QRCode(qr,{text:qr.dataset.verifyUrl,width:150,height:150,colorDark:'#102b55',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});}
-  } catch(error) { const qr=$('#certificateQr',backdrop);if(qr)qr.innerHTML='<span style="font-size:8px;text-align:center;color:#8a5c08">QR unavailable<br>connect online</span>'; }
+    await renderCertificateQr($('#certificateQr',backdrop));
+    downloadButton.disabled = false;
+    downloadButton.textContent = 'Download PDF';
+    printButton.disabled = false;
+    printButton.textContent = 'Print';
+  } catch(error) {
+    const qr = $('#certificateQr',backdrop);
+    if(qr) {
+      qr.innerHTML = '<span style="font-size:8px;text-align:center;color:#8a5c08;padding:4px">QR unavailable. Reopen while online.</span>';
+      qr.dataset.qrReady = 'false';
+    }
+    downloadButton.textContent = 'QR could not load';
+    printButton.textContent = 'QR could not load';
+    toast('The certificate QR code could not be prepared. Reopen the certificate while online.', 'error');
+  }
 }
 async function downloadCertificatePdf(c) {
   const button = $('#download-certificate-pdf');
@@ -871,6 +918,10 @@ async function downloadCertificatePdf(c) {
     await loadExternalScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js', 'html2canvas');
     await loadExternalScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', 'jspdf');
     if (!paper) throw new Error('The certificate preview is not available. Close and reopen the certificate.');
+    const qr = $('#certificateQr');
+    if (!qr || qr.dataset.qrReady !== 'true' || !qr.querySelector('canvas, img')) {
+      throw new Error('The certificate QR code is not ready. Close and reopen the certificate while online.');
+    }
     if (document.fonts?.ready) await document.fonts.ready;
     await Promise.all([...paper.querySelectorAll('img')].map(img => img.decode ? img.decode().catch(() => {}) : Promise.resolve()));
     paper.classList.add('cert-exporting');
