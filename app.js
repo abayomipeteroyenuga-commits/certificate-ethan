@@ -27,7 +27,7 @@ const statusClass = status => status === 'active' ? 'pill-green' : status === 'r
 const effectiveStatus = cert => cert?.status === 'active' && cert?.expiration_date && cert.expiration_date < todayISO() ? 'expired' : (cert?.status || 'unknown');
 const canIssueCertificates = () => state.mode === 'demo' || ['owner','admin','issuer'].includes(state.adminRole);
 const canManageCertificates = () => state.mode === 'demo' || ['owner','admin'].includes(state.adminRole);
-const isVerifyHost = location.hostname.toLowerCase().startsWith('verify.');
+const isVerifyHost = location.hostname.toLowerCase().startsWith('verify.') || location.hostname.toLowerCase() === 'ethan-certificate-verifier.onrender.com';
 
 function toast(message, kind='') {
   const node = document.createElement('div');
