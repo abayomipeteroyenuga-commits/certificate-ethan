@@ -92,12 +92,16 @@ async function init() {
   if (HAS_BACKEND) {
     try {
       await initNeonApiIfConfigured();
-      const sessionResult = await state.api.auth.getSession();
-      if (sessionResult && sessionResult.error) throw sessionResult.error;
-      const sessionData = sessionResult && sessionResult.data && typeof sessionResult.data === 'object'
-        ? sessionResult.data
-        : {};
-      const session = sessionData.session || null;
+      const authApi = state.api && state.api.auth;
+      const sessionResult = authApi && typeof authApi.getSession === 'function'
+        ? await authApi.getSession()
+        : null;
+      if (sessionResult?.error) throw sessionResult.error;
+      const sessionData = sessionResult?.data;
+      const session = sessionData && typeof sessionData === 'object'
+        && sessionData.session && typeof sessionData.session === 'object'
+        ? sessionData.session
+        : null;
       if (session) {
         state.user = session.user; state.mode = 'live';
         const {data:role,error:roleError}=await state.api.rpc('get_admin_role');
@@ -787,7 +791,7 @@ function verificationCard(result) {
 }
 
 function renderPublicVerify(initial='') {
-  app.innerHTML=`<main class="verify-shell"><header class="verify-top"><div class="verify-brand"><img src="/assets/ethan-digital-academy-logo.png" alt="Ethan Digital Academy logo"><div><b>ETHAN CERTIFICATE</b><small>OFFICIAL PUBLIC VERIFICATION</small></div></div><a class="btn btn-outline btn-small" href="${esc(CFG.appUrl||'https://certificate.ethandigitalacademy.org')}">Administrator login</a></header>
+  app.innerHTML=`<main class="verify-shell"><header class="verify-top"><div class="verify-brand"><img src="/assets/ethan-digital-academy-logo.png" alt="Ethan Digital Academy logo"><div><b>ETHAN CERTIFICATE</b><small>OFFICIAL PUBLIC VERIFICATION</small></div></div></header>
     <section class="verify-hero"><div class="eyebrow">ETHAN DIGITAL ACADEMY · CERTIFICATE REGISTRY</div><h1>Verify a certificate.</h1><p>Confirm whether a certificate was issued by Ethan Digital Academy and check its current registry status. Scan the certificate QR code or enter its unique certificate number below.</p></section>
     <section class="panel verify-card"><div class="section-head"><div><h3>Certificate verification</h3><p>Enter the certificate number exactly as printed on the certificate.</p></div><span class="pill pill-blue">Public service</span></div><form id="public-verify-form" class="verify-search"><input id="public-verify-input" value="${esc(initial)}" placeholder="EDA-CERT-2026-000001" autocomplete="off" required><button class="btn btn-primary" type="submit">Verify now →</button></form><div id="public-verify-result" class="verify-result">${HAS_BACKEND?'':'<div class="helper-note" style="margin-top:18px"><strong>Preview environment:</strong> the live public registry becomes available after the Neon database is connected and the application is deployed. Local demo records are not official verification records.</div>'}</div></section>
     <footer class="verify-footer">Issued by <strong>${esc(CFG.issuerName||'Ethan Digital Academy')}</strong>, a brand of ${esc(CFG.issuerParent||'ALLON-MAADIAH INTERNATIONAL LIMITED')} (RC ${esc(CFG.issuerRc||'1364788')}). A positive result confirms a matching registry record; it does not replace independent checks required by an employer or institution.</footer></main>`;
