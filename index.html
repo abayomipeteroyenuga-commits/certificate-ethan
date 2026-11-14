@@ -17,8 +17,8 @@
     <div class="boot-screen"><div class="boot-mark">ED</div><div class="boot-title">ETHAN CERTIFICATE</div><div class="boot-sub">Preparing secure certificate services…</div></div>
   </div>
   <div id="toast-container" aria-live="polite" aria-atomic="true"></div>
-  <script src="/config.js?v=20261111-session-recovery-2"></script>
-  <script type="module" src="/app.js?v=20261111-session-recovery-2"></script>
+  <script src="/config.js?v=20261114-public-verifier-session-safe-1"></script>
+  <script type="module" src="/app.js?v=20261114-public-verifier-session-safe-1"></script>
   <script>
     if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
       let refreshingForWorkerUpdate = false;
@@ -30,7 +30,7 @@
       window.addEventListener('load', async () => {
         try {
           const registration = await navigator.serviceWorker.register(
-            '/sw.js?v=20261111-session-recovery-2',
+            '/sw.js?v=20261114-public-verifier-session-safe-1',
             { updateViaCache: 'none' }
           );
           await registration.update();
